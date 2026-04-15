@@ -35,16 +35,24 @@ public:
 
 private:
     std::vector<VertexHE> vertices;
-    std::vector<unsigned int> faceIndices;
-    std::vector<unsigned int> selectedIndices;
+    std::vector<unsigned int> faceIndices;      // индексы для отрисовки всех граней (треугольники)
+    std::vector<unsigned int> selectedIndices;  // индексы только выделенных граней
+    std::vector<unsigned int> edgeIndices;      // индексы рёбер (линии)
     std::vector<Face> faces;
 
     GLuint VAO, VBO, EBO;
     bool dirty;
+    bool edgesDirty;
 
     void updateGPUBuffers();
     void updateSelectedBuffers();
+    void rebuildEdgeIndices();
     int addVertex(const VertexHE& v);
+
+    // Точный тест пересечения луча с треугольником
+    bool rayIntersectsTriangle(const Vec3& rayOrigin, const Vec3& rayDir,
+                               const Vec3& v0, const Vec3& v1, const Vec3& v2,
+                               float& t);
 };
 
 #endif
