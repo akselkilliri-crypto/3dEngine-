@@ -29,15 +29,16 @@ public:
     void drawSelectedFaces(GLuint program, GLenum mode);
     void drawEdges(GLuint program, GLenum mode);
 
-    int pickFace(const Mat4& mvp, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY);
+    // Теперь принимает отдельно матрицы проекции и вида
+    int pickFace(const Mat4& proj, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY);
     void toggleFaceSelection(int faceIndex);
     void subdivideSelected();
 
 private:
     std::vector<VertexHE> vertices;
-    std::vector<unsigned int> faceIndices;      // индексы для отрисовки всех граней (треугольники)
-    std::vector<unsigned int> selectedIndices;  // индексы только выделенных граней
-    std::vector<unsigned int> edgeIndices;      // индексы рёбер (линии)
+    std::vector<unsigned int> faceIndices;
+    std::vector<unsigned int> selectedIndices;
+    std::vector<unsigned int> edgeIndices;
     std::vector<Face> faces;
 
     GLuint VAO, VBO, EBO;
@@ -49,7 +50,6 @@ private:
     void rebuildEdgeIndices();
     int addVertex(const VertexHE& v);
 
-    // Точный тест пересечения луча с треугольником
     bool rayIntersectsTriangle(const Vec3& rayOrigin, const Vec3& rayDir,
                                const Vec3& v0, const Vec3& v1, const Vec3& v2,
                                float& t);
