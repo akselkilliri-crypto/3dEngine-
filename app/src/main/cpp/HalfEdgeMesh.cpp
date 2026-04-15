@@ -31,22 +31,29 @@ void HalfEdgeMesh::createCube() {
     vertices.push_back({{ 1, 1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}, 6});
     vertices.push_back({{-1, 1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}, 7});
 
-    faces.push_back({{0,1,2,3}, {0,0,1}, false}); // front
-    faces.push_back({{4,7,6,5}, {0,0,-1}, false}); // back
-    faces.push_back({{4,0,3,7}, {-1,0,0}, false}); // left
-    faces.push_back({{1,5,6,2}, {1,0,0}, false}); // right
-    faces.push_back({{3,2,6,7}, {0,1,0}, false}); // top
-    faces.push_back({{4,5,1,0}, {0,-1,0}, false}); // bottom
+    Face f;
+    f.vertexIndices = {0,1,2,3}; f.normal = {0,0,1}; f.selected = false;
+    faces.push_back(f);
+    f.vertexIndices = {4,7,6,5}; f.normal = {0,0,-1}; f.selected = false;
+    faces.push_back(f);
+    f.vertexIndices = {4,0,3,7}; f.normal = {-1,0,0}; f.selected = false;
+    faces.push_back(f);
+    f.vertexIndices = {1,5,6,2}; f.normal = {1,0,0}; f.selected = false;
+    faces.push_back(f);
+    f.vertexIndices = {3,2,6,7}; f.normal = {0,1,0}; f.selected = false;
+    faces.push_back(f);
+    f.vertexIndices = {4,5,1,0}; f.normal = {0,-1,0}; f.selected = false;
+    faces.push_back(f);
 
     for (size_t i = 0; i < faces.size(); ++i) {
-        const auto& f = faces[i];
-        if (f.vertexIndices.size() == 4) {
-            faceIndices.push_back(f.vertexIndices[0]);
-            faceIndices.push_back(f.vertexIndices[1]);
-            faceIndices.push_back(f.vertexIndices[2]);
-            faceIndices.push_back(f.vertexIndices[0]);
-            faceIndices.push_back(f.vertexIndices[2]);
-            faceIndices.push_back(f.vertexIndices[3]);
+        const auto& face = faces[i];
+        if (face.vertexIndices.size() == 4) {
+            faceIndices.push_back(face.vertexIndices[0]);
+            faceIndices.push_back(face.vertexIndices[1]);
+            faceIndices.push_back(face.vertexIndices[2]);
+            faceIndices.push_back(face.vertexIndices[0]);
+            faceIndices.push_back(face.vertexIndices[2]);
+            faceIndices.push_back(face.vertexIndices[3]);
         }
     }
 
