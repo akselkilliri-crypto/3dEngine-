@@ -2,7 +2,6 @@
 #include <android/log.h>
 #include <cmath>
 #include <algorithm>
-#include <map>
 #include <set>
 
 #define LOG_TAG "HalfEdgeMesh"
@@ -17,7 +16,6 @@ HalfEdgeMesh::~HalfEdgeMesh() {
 }
 
 int HalfEdgeMesh::addVertex(const VertexHE& v) {
-    // Проверяем по позиции и нормали (для куба достаточно позиции)
     for (size_t i = 0; i < vertices.size(); ++i) {
         if (vertices[i].position.x == v.position.x &&
             vertices[i].position.y == v.position.y &&
@@ -31,7 +29,6 @@ int HalfEdgeMesh::addVertex(const VertexHE& v) {
 
 void HalfEdgeMesh::rebuildEdgeIndices() {
     edgeIndices.clear();
-    // Используем set для уникальных рёбер (неориентированных)
     std::set<std::pair<int,int>> edges;
     for (const auto& face : faces) {
         int n = face.vertexIndices.size();
@@ -190,33 +187,40 @@ bool HalfEdgeMesh::rayIntersectsTriangle(const Vec3& rayOrigin, const Vec3& rayD
     return (t > EPSILON);
 }
 
-int HalfEdgeMesh::pickFace(const Mat4& mvp, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY) {
+int HalfEdgeMesh::pickFace(const Mat4& proj, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY) {
+    // Преобразуем координаты касания в NDC
     float ndcX = (2.0f * touchX) / screenWidth - 1.0f;
     float ndcY = 1.0f - (2.0f * touchY) / screenHeight;
 
-    Mat4 invMVP = Mat4::inverse(mvp);
+    // Строим луч в мировых координатах, используя обратную проекцию и обратный вид
+    Mat4 invProj = Mat4::inverse(proj);
+    Mat4 invView = Mat4::inverse(view);
 
-    Vec4 nearPointNDC(ndcX, ndcY, -1.0f, 1.0f);
-    Vec4 nearPointWorld = invMVP * nearPointNDC;
-    nearPointWorld = Vec4(nearPointWorld.x / nearPointWorld.w, nearPointWorld.y / nearPointWorld.w, nearPointWorld.z / nearPointWorld.w, 1.0f);
+    // Точка на ближней плоскости в clip space
+    Vec4 nearClip(ndcX, ndcY, -1.0f, 1.0f);
+    Vec4 nearEye = invProj * nearClip;
+    nearEye = Vec4(nearEye.x / nearEye.w, nearEye.y / nearEye.w, nearEye.z / nearEye.w, 1.0f);
+    Vec4 nearWorld = invView * nearEye;
 
-    Vec4 farPointNDC(ndcX, ndcY, 1.0f, 1.0f);
-    Vec4 farPointWorld = invMVP * farPointNDC;
-    farPointWorld = Vec4(farPointWorld.x / farPointWorld.w, farPointWorld.y / farPointWorld.w, farPointWorld.z / farPointWorld.w, 1.0f);
+    // Точка на дальней плоскости
+    Vec4 farClip(ndcX, ndcY, 1.0f, 1.0f);
+    Vec4 farEye = invProj * farClip;
+    farEye = Vec4(farEye.x / farEye.w, farEye.y / farEye.w, farEye.z / farEye.w, 1.0f);
+    Vec4 farWorld = invView * farEye;
 
-    Vec3 rayOrigin(nearPointWorld.x, nearPointWorld.y, nearPointWorld.z);
-    Vec3 rayDir(farPointWorld.x - nearPointWorld.x, farPointWorld.y - nearPointWorld.y, farPointWorld.z - nearPointWorld.z);
+    Vec3 rayOrigin(nearWorld.x, nearWorld.y, nearWorld.z);
+    Vec3 rayDir(farWorld.x - nearWorld.x, farWorld.y - nearWorld.y, farWorld.z - nearWorld.z);
     rayDir = rayDir.normalized();
 
     int closestFace = -1;
     float minT = 1e9f;
 
-    // Перебираем все грани
+    // Перебираем все грани и их треугольники
     for (size_t i = 0; i < faces.size(); ++i) {
         const Face& face = faces[i];
         if (face.vertexIndices.size() < 3) continue;
 
-        // Триангулируем полигон (для квадрата два треугольника)
+        // Триангуляция полигона (для квадрата два треугольника)
         for (size_t j = 1; j < face.vertexIndices.size() - 1; ++j) {
             int idx0 = face.vertexIndices[0];
             int idx1 = face.vertexIndices[j];
@@ -309,7 +313,6 @@ void HalfEdgeMesh::subdivideSelected() {
 
     faces = newFaces;
 
-    // Перестраиваем faceIndices
     faceIndices.clear();
     for (size_t i = 0; i < faces.size(); ++i) {
         const auto& f = faces[i];
