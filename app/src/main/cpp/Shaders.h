@@ -37,10 +37,10 @@ void main() {
     vec2 matcapCoord = normal.xy * 0.5 + 0.5;
     vec4 matcapColor = texture(u_MatCap, matcapCoord);
     
-    // Добавляем ambient составляющую, чтобы куб никогда не был полностью чёрным
-    float ambient = 0.3;
-    vec4 finalColor = (ambient + matcapColor) * v_Color;
-    fragColor = finalColor;
+    // Гарантируем, что цвет не будет ниже определённого порога
+    float ambient = 0.5;
+    vec4 litColor = vec4(max(matcapColor.rgb, vec3(ambient)), 1.0);
+    fragColor = litColor * v_Color;
 }
 )";
 
