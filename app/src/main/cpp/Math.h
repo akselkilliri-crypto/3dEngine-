@@ -19,8 +19,10 @@ struct Vec3 {
     float dot(const Vec3& other) const { return x*other.x + y*other.y + z*other.z; }
 };
 
+// Column-major 4x4 matrix (as expected by OpenGL)
 struct Mat4 {
     float data[16];
+
     Mat4() { for(int i=0;i<16;++i) data[i]=0; }
     static Mat4 identity() {
         Mat4 m;
@@ -29,12 +31,15 @@ struct Mat4 {
     }
     Mat4 operator*(const Mat4& other) const {
         Mat4 r;
-        for(int i=0;i<4;++i)
-            for(int j=0;j<4;++j)
-                r.data[i*4+j] = data[i*4+0]*other.data[0*4+j] +
-                                data[i*4+1]*other.data[1*4+j] +
-                                data[i*4+2]*other.data[2*4+j] +
-                                data[i*4+3]*other.data[3*4+j];
+        for(int col=0; col<4; ++col) {
+            for(int row=0; row<4; ++row) {
+                float sum = 0;
+                for(int k=0; k<4; ++k) {
+                    sum += data[k*4+row] * other.data[col*4+k];
+                }
+                r.data[col*4+row] = sum;
+            }
+        }
         return r;
     }
     static Mat4 perspective(float fovy, float aspect, float near, float far) {
@@ -51,11 +56,12 @@ struct Mat4 {
         Vec3 f = (center - eye).normalized();
         Vec3 s = f.cross(up).normalized();
         Vec3 u = s.cross(f);
+
         Mat4 m;
-        m.data[0] = s.x; m.data[4] = s.y; m.data[8] = s.z;  m.data[12] = -s.dot(eye);
-        m.data[1] = u.x; m.data[5] = u.y; m.data[9] = u.z;  m.data[13] = -u.dot(eye);
-        m.data[2] = -f.x;m.data[6] = -f.y;m.data[10] = -f.z; m.data[14] = f.dot(eye);
-        m.data[15] = 1.0f;
+        m.data[0] = s.x;  m.data[4] = s.y;  m.data[8]  = s.z;  m.data[12] = -s.dot(eye);
+        m.data[1] = u.x;  m.data[5] = u.y;  m.data[9]  = u.z;  m.data[13] = -u.dot(eye);
+        m.data[2] = -f.x; m.data[6] = -f.y; m.data[10] = -f.z; m.data[14] = f.dot(eye);
+        m.data[3] = 0;    m.data[7] = 0;    m.data[11] = 0;    m.data[15] = 1.0f;
         return m;
     }
 };
