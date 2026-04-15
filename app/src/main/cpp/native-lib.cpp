@@ -156,8 +156,7 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
             break;
         case 1: // ACTION_UP
             if (!tapHandled) {
-                Mat4 mvp = gProjectionMatrix * gViewMatrix * gModelMatrix;
-                int faceIdx = gMesh->pickFace(mvp, gViewMatrix, gWidth, gHeight, x, y);
+                int faceIdx = gMesh->pickFace(gProjectionMatrix, gViewMatrix, gWidth, gHeight, x, y);
                 if (faceIdx >= 0) {
                     gMesh->toggleFaceSelection(faceIdx);
                 }
