@@ -110,7 +110,6 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
     GLint colorLoc = glGetUniformLocation(gHighlightProgram, "u_Color");
     glUniform4f(colorLoc, 1.0f, 1.0f, 0.0f, 1.0f); // Жёлтый
-    // Включаем полигональное смещение, чтобы подсветка рисовалась поверх граней
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(-1.0f, -1.0f);
     gMesh->drawSelectedFaces(gHighlightProgram, GL_TRIANGLES);
@@ -145,7 +144,7 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
             if (gDragging) {
                 float dx = x - gLastX;
                 float dy = y - gLastY;
-                if (fabs(dx) > 10 || fabs(dy) > 10) tapHandled = true; // считаем драгом, не тап
+                if (fabs(dx) > 10 || fabs(dy) > 10) tapHandled = true;
                 gYaw -= dx * 0.5f;
                 gPitch += dy * 0.5f;
                 if (gPitch > 89.0f) gPitch = 89.0f;
@@ -157,7 +156,6 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
             break;
         case 1: // ACTION_UP
             if (!tapHandled) {
-                // Тап - пытаемся выделить грань
                 Mat4 mvp = gProjectionMatrix * gViewMatrix * gModelMatrix;
                 int faceIdx = gMesh->pickFace(mvp, gViewMatrix, gWidth, gHeight, x, y);
                 if (faceIdx >= 0) {
@@ -179,6 +177,13 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnScale(
     if (gDistance < 2.0f) gDistance = 2.0f;
     if (gDistance > 20.0f) gDistance = 20.0f;
     updateViewMatrix();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativeSubdivide(JNIEnv*, jobject) {
+    if (gMesh) {
+        gMesh->subdivideSelected();
+    }
 }
 
 } // extern "C"
