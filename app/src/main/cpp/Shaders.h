@@ -40,7 +40,7 @@ void main() {
 }
 )";
 
-// Шейдер для рёбер (простой, цвет uniform)
+// Шейдер для рёбер
 static const char* edgeVertexShaderSource = R"(
 #version 300 es
 uniform mat4 u_MVPMatrix;
@@ -52,6 +52,28 @@ void main() {
 )";
 
 static const char* edgeFragmentShaderSource = R"(
+#version 300 es
+precision highp float;
+uniform vec4 u_Color;
+out vec4 fragColor;
+
+void main() {
+    fragColor = u_Color;
+}
+)";
+
+// Шейдер для подсветки выделенных граней (однородный цвет)
+static const char* highlightVertexShaderSource = R"(
+#version 300 es
+uniform mat4 u_MVPMatrix;
+layout(location = 0) in vec3 a_Position;
+
+void main() {
+    gl_Position = u_MVPMatrix * vec4(a_Position, 1.0);
+}
+)";
+
+static const char* highlightFragmentShaderSource = R"(
 #version 300 es
 precision highp float;
 uniform vec4 u_Color;
