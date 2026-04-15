@@ -14,6 +14,18 @@ HalfEdgeMesh::~HalfEdgeMesh() {
     if (EBO) glDeleteBuffers(1, &EBO);
 }
 
+int HalfEdgeMesh::addVertex(const VertexHE& v) {
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        if (vertices[i].position.x == v.position.x &&
+            vertices[i].position.y == v.position.y &&
+            vertices[i].position.z == v.position.z) {
+            return i;
+        }
+    }
+    vertices.push_back(v);
+    return vertices.size() - 1;
+}
+
 void HalfEdgeMesh::createCube() {
     vertices.clear();
     faces.clear();
@@ -204,4 +216,88 @@ void HalfEdgeMesh::toggleFaceSelection(int faceIndex) {
         faces[faceIndex].selected = !faces[faceIndex].selected;
         updateSelectedBuffers();
     }
+}
+
+void HalfEdgeMesh::subdivideSelected() {
+    std::vector<Face> newFaces;
+    std::vector<Face> facesToRemove;
+
+    for (size_t i = 0; i < faces.size(); ++i) {
+        if (faces[i].selected) {
+            facesToRemove.push_back(faces[i]);
+        } else {
+            newFaces.push_back(faces[i]);
+        }
+    }
+
+    if (facesToRemove.empty()) return;
+
+    for (const Face& face : facesToRemove) {
+        if (face.vertexIndices.size() != 4) continue;
+
+        int v0 = face.vertexIndices[0];
+        int v1 = face.vertexIndices[1];
+        int v2 = face.vertexIndices[2];
+        int v3 = face.vertexIndices[3];
+
+        Vec3 p0 = vertices[v0].position;
+        Vec3 p1 = vertices[v1].position;
+        Vec3 p2 = vertices[v2].position;
+        Vec3 p3 = vertices[v3].position;
+
+        Vec3 p01 = (p0 + p1) * 0.5f;
+        Vec3 p12 = (p1 + p2) * 0.5f;
+        Vec3 p23 = (p2 + p3) * 0.5f;
+        Vec3 p30 = (p3 + p0) * 0.5f;
+        Vec3 center = (p0 + p1 + p2 + p3) * 0.25f;
+
+        Vec3 normal = face.normal;
+        float gray[4] = {0.7f, 0.7f, 0.7f, 1.0f};
+
+        VertexHE v01, v12, v23, v30, vc;
+        v01.position = p01; v01.normal = normal; for(int c=0;c<4;++c) v01.color[c] = gray[c];
+        v12.position = p12; v12.normal = normal; for(int c=0;c<4;++c) v12.color[c] = gray[c];
+        v23.position = p23; v23.normal = normal; for(int c=0;c<4;++c) v23.color[c] = gray[c];
+        v30.position = p30; v30.normal = normal; for(int c=0;c<4;++c) v30.color[c] = gray[c];
+        vc.position = center; vc.normal = normal; for(int c=0;c<4;++c) vc.color[c] = gray[c];
+
+        int idx01 = addVertex(v01);
+        int idx12 = addVertex(v12);
+        int idx23 = addVertex(v23);
+        int idx30 = addVertex(v30);
+        int idxC = addVertex(vc);
+
+        Face f1, f2, f3, f4;
+        f1.vertexIndices = {v0, idx01, idxC, idx30};
+        f2.vertexIndices = {idx01, v1, idx12, idxC};
+        f3.vertexIndices = {idxC, idx12, v2, idx23};
+        f4.vertexIndices = {idx30, idxC, idx23, v3};
+
+        f1.normal = f2.normal = f3.normal = f4.normal = normal;
+        f1.selected = f2.selected = f3.selected = f4.selected = false;
+
+        newFaces.push_back(f1);
+        newFaces.push_back(f2);
+        newFaces.push_back(f3);
+        newFaces.push_back(f4);
+    }
+
+    faces = newFaces;
+
+    faceIndices.clear();
+    for (size_t i = 0; i < faces.size(); ++i) {
+        const auto& f = faces[i];
+        if (f.vertexIndices.size() == 4) {
+            faceIndices.push_back(f.vertexIndices[0]);
+            faceIndices.push_back(f.vertexIndices[1]);
+            faceIndices.push_back(f.vertexIndices[2]);
+            faceIndices.push_back(f.vertexIndices[0]);
+            faceIndices.push_back(f.vertexIndices[2]);
+            faceIndices.push_back(f.vertexIndices[3]);
+        }
+    }
+
+    dirty = true;
+    updateSelectedBuffers();
+    LOGI("Subdivision complete. Total faces: %zu", faces.size());
 }
