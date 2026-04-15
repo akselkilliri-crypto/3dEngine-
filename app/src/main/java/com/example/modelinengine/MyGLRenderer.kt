@@ -18,6 +18,7 @@ class MyGLRenderer(private val context: Context) : GLSurfaceView.Renderer {
     external fun nativeResize(width: Int, height: Int)
     external fun nativeRender()
     external fun nativeOnTouchEvent(action: Int, x: Float, y: Float)
+    external fun nativeOnScale(scaleFactor: Float)
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         nativeInit()
@@ -36,5 +37,9 @@ class MyGLRenderer(private val context: Context) : GLSurfaceView.Renderer {
         val x = event.x
         val y = event.y
         nativeOnTouchEvent(action, x, y)
+    }
+
+    fun handleScale(scaleFactor: Float) {
+        nativeOnScale(scaleFactor)
     }
 }
