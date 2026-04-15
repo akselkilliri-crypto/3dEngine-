@@ -21,19 +21,22 @@ GLuint createProceduralMatCapTexture() {
                 continue;
             }
 
-            float r = fmax(0.0f, nx) * 0.8f + fmax(0.0f, ny) * 0.2f + 0.2f;
-            float g = fmax(0.0f, ny) * 0.7f + fmax(0.0f, -nx) * 0.3f + 0.1f;
-            float b = fmax(0.0f, nz) * 0.9f + fmax(0.0f, -ny) * 0.3f + 0.1f;
-
-            float fresnel = powf(1.0f - fabs(nz), 2.0f);
-            r += fresnel * 0.5f;
-            g += fresnel * 0.3f;
-            b += fresnel * 0.2f;
+            // Нормализованный вектор (nx, ny, nz) используется для генерации освещения
+            // Создаём более равномерное освещение с акцентом на переднюю полусферу
+            float front = fmax(0.0f, nz);                    // 0..1, 1 когда смотрит прямо на камеру
+            float sideX = fabs(nx);
+            float sideY = fabs(ny);
+            
+            // Базовая яркость от 0.5 до 1.0, зависит от ориентации
+            float brightness = 0.6f + 0.4f * front + 0.2f * sideX + 0.2f * sideY;
+            if (brightness > 1.0f) brightness = 1.0f;
+            if (brightness < 0.4f) brightness = 0.4f;  // никогда не будет совсем тёмным
 
             int idx = (y * size + x) * 4;
-            data[idx] = (unsigned char)(fmin(r, 1.0f) * 255);
-            data[idx+1] = (unsigned char)(fmin(g, 1.0f) * 255);
-            data[idx+2] = (unsigned char)(fmin(b, 1.0f) * 255);
+            unsigned char gray = (unsigned char)(brightness * 255);
+            data[idx]   = gray;
+            data[idx+1] = gray;
+            data[idx+2] = gray;
             data[idx+3] = 255;
         }
     }
