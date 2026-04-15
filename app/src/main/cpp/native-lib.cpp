@@ -3,22 +3,24 @@
 #include <android/log.h>
 #include <vector>
 #include <cmath>
+#include <algorithm>
 
 #include "GLUtils.h"
 #include "Shaders.h"
-#include "Mesh.h"
 #include "MatCapTexture.h"
 #include "Math.h"
+#include "HalfEdgeMesh.h"
 
 #define LOG_TAG "NativeLib"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 static GLuint gProgram = 0;          // Шейдер для граней (MatCap)
-static GLuint gEdgeProgram = 0;      // Простой шейдер для рёбер
+static GLuint gEdgeProgram = 0;      // Шейдер для рёбер
+static GLuint gHighlightProgram = 0; // Шейдер для подсветки выделенных граней
 static GLuint gMatCapTexture = 0;
-static Mesh* gCubeMesh = nullptr;    // Грани
-static Mesh* gCubeEdgesMesh = nullptr; // Рёбра
+
+static HalfEdgeMesh* gMesh = nullptr;
 
 static Mat4 gProjectionMatrix;
 static Mat4 gViewMatrix;
@@ -34,42 +36,6 @@ static Vec3 gTarget(0,0,0);
 
 static float gLastX = 0, gLastY = 0;
 static bool gDragging = false;
-
-void initCube() {
-    // Серый цвет для всех вершин
-    float gray[4] = {0.7f, 0.7f, 0.7f, 1.0f};
-
-    std::vector<Vertex> vertices;
-    std::vector<unsigned int> indicesFaces;
-    std::vector<unsigned int> indicesEdges;
-
-    // 8 вершин куба
-    vertices.push_back({{-1,-1, 1}, {0,0,1}, {gray[0],gray[1],gray[2],gray[3]}}); // 0
-    vertices.push_back({{ 1,-1, 1}, {0,0,1}, {gray[0],gray[1],gray[2],gray[3]}}); // 1
-    vertices.push_back({{ 1, 1, 1}, {0,0,1}, {gray[0],gray[1],gray[2],gray[3]}}); // 2
-    vertices.push_back({{-1, 1, 1}, {0,0,1}, {gray[0],gray[1],gray[2],gray[3]}}); // 3
-
-    vertices.push_back({{-1,-1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}}); // 4
-    vertices.push_back({{ 1,-1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}}); // 5
-    vertices.push_back({{ 1, 1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}}); // 6
-    vertices.push_back({{-1, 1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}}); // 7
-
-    // Индексы для граней (треугольники)
-    indicesFaces.insert(indicesFaces.end(), {0,1,2, 0,2,3}); // front
-    indicesFaces.insert(indicesFaces.end(), {4,6,5, 4,7,6}); // back
-    indicesFaces.insert(indicesFaces.end(), {4,0,3, 4,3,7}); // left
-    indicesFaces.insert(indicesFaces.end(), {1,5,6, 1,6,2}); // right
-    indicesFaces.insert(indicesFaces.end(), {3,2,6, 3,6,7}); // top
-    indicesFaces.insert(indicesFaces.end(), {4,5,1, 4,1,0}); // bottom
-
-    // Индексы для рёбер (12 рёбер * 2 вершины)
-    indicesEdges.insert(indicesEdges.end(), {0,1, 1,2, 2,3, 3,0});
-    indicesEdges.insert(indicesEdges.end(), {4,5, 5,6, 6,7, 7,4});
-    indicesEdges.insert(indicesEdges.end(), {0,4, 1,5, 2,6, 3,7});
-
-    gCubeMesh = new Mesh(vertices, indicesFaces);
-    gCubeEdgesMesh = new Mesh(vertices, indicesEdges);
-}
 
 void updateViewMatrix() {
     float radYaw = gYaw * M_PI / 180.0f;
@@ -93,13 +59,16 @@ Java_com_example_modelinengine_MyGLRenderer_nativeInit(JNIEnv*, jobject) {
 
     gProgram = createProgram(vertexShaderSource, fragmentShaderSource);
     gEdgeProgram = createProgram(edgeVertexShaderSource, edgeFragmentShaderSource);
-    if (gProgram == 0 || gEdgeProgram == 0) {
+    gHighlightProgram = createProgram(highlightVertexShaderSource, highlightFragmentShaderSource);
+    if (gProgram == 0 || gEdgeProgram == 0 || gHighlightProgram == 0) {
         LOGE("Failed to create shader programs");
         return;
     }
 
     gMatCapTexture = createProceduralMatCapTexture();
-    initCube();
+
+    gMesh = new HalfEdgeMesh();
+    gMesh->createCube();
 
     gModelMatrix = Mat4::identity();
     updateViewMatrix();
@@ -118,41 +87,45 @@ JNIEXPORT void JNICALL
 Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (gProgram == 0 || gCubeMesh == nullptr) return;
-
-    // === Рисуем грани ===
-    glUseProgram(gProgram);
+    if (gProgram == 0 || gMesh == nullptr) return;
 
     Mat4 mvp = gProjectionMatrix * gViewMatrix * gModelMatrix;
+    Mat4 mv = gViewMatrix * gModelMatrix;
+
+    // === Рисуем грани (серые с MatCap) ===
+    glUseProgram(gProgram);
     GLint mvpLoc = glGetUniformLocation(gProgram, "u_MVPMatrix");
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
-
-    Mat4 mv = gViewMatrix * gModelMatrix;
     GLint mvLoc = glGetUniformLocation(gProgram, "u_MVMatrix");
     glUniformMatrix4fv(mvLoc, 1, GL_FALSE, mv.data);
-
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, gMatCapTexture);
     GLint texLoc = glGetUniformLocation(gProgram, "u_MatCap");
     glUniform1i(texLoc, 0);
+    gMesh->drawFaces(gProgram, GL_TRIANGLES);
 
-    gCubeMesh->draw(gProgram, GL_TRIANGLES);
+    // === Рисуем выделенные грани (жёлтые) ===
+    glUseProgram(gHighlightProgram);
+    mvpLoc = glGetUniformLocation(gHighlightProgram, "u_MVPMatrix");
+    glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
+    GLint colorLoc = glGetUniformLocation(gHighlightProgram, "u_Color");
+    glUniform4f(colorLoc, 1.0f, 1.0f, 0.0f, 1.0f); // Жёлтый
+    // Включаем полигональное смещение, чтобы подсветка рисовалась поверх граней
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-1.0f, -1.0f);
+    gMesh->drawSelectedFaces(gHighlightProgram, GL_TRIANGLES);
+    glDisable(GL_POLYGON_OFFSET_FILL);
 
     // === Рисуем рёбра ===
     glUseProgram(gEdgeProgram);
-
     mvpLoc = glGetUniformLocation(gEdgeProgram, "u_MVPMatrix");
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
-
-    GLint colorLoc = glGetUniformLocation(gEdgeProgram, "u_Color");
-    glUniform4f(colorLoc, 0.0f, 0.0f, 0.0f, 1.0f); // Чёрный цвет
-
+    colorLoc = glGetUniformLocation(gEdgeProgram, "u_Color");
+    glUniform4f(colorLoc, 0.0f, 0.0f, 0.0f, 1.0f);
     glDisable(GL_CULL_FACE);
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(-1.0f, -1.0f);
-
-    gCubeEdgesMesh->draw(gEdgeProgram, GL_LINES);
-
+    gMesh->drawEdges(gEdgeProgram, GL_LINES);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glEnable(GL_CULL_FACE);
 }
@@ -160,16 +133,19 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
 JNIEXPORT void JNICALL
 Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
         JNIEnv*, jobject, jint action, jfloat x, jfloat y) {
+    static bool tapHandled = false;
     switch (action) {
         case 0: // ACTION_DOWN
             gDragging = true;
             gLastX = x;
             gLastY = y;
+            tapHandled = false;
             break;
         case 2: // ACTION_MOVE
             if (gDragging) {
                 float dx = x - gLastX;
                 float dy = y - gLastY;
+                if (fabs(dx) > 10 || fabs(dy) > 10) tapHandled = true; // считаем драгом, не тап
                 gYaw -= dx * 0.5f;
                 gPitch += dy * 0.5f;
                 if (gPitch > 89.0f) gPitch = 89.0f;
@@ -180,6 +156,16 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
             }
             break;
         case 1: // ACTION_UP
+            if (!tapHandled) {
+                // Тап - пытаемся выделить грань
+                Mat4 mvp = gProjectionMatrix * gViewMatrix * gModelMatrix;
+                int faceIdx = gMesh->pickFace(mvp, gViewMatrix, gWidth, gHeight, x, y);
+                if (faceIdx >= 0) {
+                    gMesh->toggleFaceSelection(faceIdx);
+                }
+            }
+            gDragging = false;
+            break;
         case 3: // ACTION_CANCEL
             gDragging = false;
             break;
