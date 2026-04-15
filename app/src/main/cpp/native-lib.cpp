@@ -7,7 +7,6 @@
 #include "GLUtils.h"
 #include "Shaders.h"
 #include "Mesh.h"
-#include "MatCapTexture.h"
 #include "Math.h"
 
 #define LOG_TAG "NativeLib"
@@ -15,7 +14,6 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 static GLuint gProgram = 0;
-static GLuint gMatCapTexture = 0;
 static Mesh* gCubeMesh = nullptr;
 
 static Mat4 gProjectionMatrix;
@@ -28,16 +26,16 @@ void initCube() {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
 
-    // Куб от -1 до 1 с нормалями и цветами
-    vertices.push_back({{-1,-1, 1}, {0,0,1}, {1,0,0,1}}); // 0
-    vertices.push_back({{ 1,-1, 1}, {0,0,1}, {0,1,0,1}}); // 1
-    vertices.push_back({{ 1, 1, 1}, {0,0,1}, {0,0,1,1}}); // 2
-    vertices.push_back({{-1, 1, 1}, {0,0,1}, {1,1,0,1}}); // 3
+    // Яркие цвета для граней
+    vertices.push_back({{-1,-1, 1}, {0,0,1}, {1,0,0,1}}); // 0 красный
+    vertices.push_back({{ 1,-1, 1}, {0,0,1}, {0,1,0,1}}); // 1 зелёный
+    vertices.push_back({{ 1, 1, 1}, {0,0,1}, {0,0,1,1}}); // 2 синий
+    vertices.push_back({{-1, 1, 1}, {0,0,1}, {1,1,0,1}}); // 3 жёлтый
 
-    vertices.push_back({{-1,-1,-1}, {0,0,-1}, {1,0,1,1}}); // 4
-    vertices.push_back({{ 1,-1,-1}, {0,0,-1}, {0,1,1,1}}); // 5
-    vertices.push_back({{ 1, 1,-1}, {0,0,-1}, {0.5,0.5,0.5,1}}); // 6
-    vertices.push_back({{-1, 1,-1}, {0,0,-1}, {1,0.5,0,1}}); // 7
+    vertices.push_back({{-1,-1,-1}, {0,0,-1}, {1,0,1,1}}); // 4 пурпурный
+    vertices.push_back({{ 1,-1,-1}, {0,0,-1}, {0,1,1,1}}); // 5 циан
+    vertices.push_back({{ 1, 1,-1}, {0,0,-1}, {1,1,1,1}}); // 6 белый
+    vertices.push_back({{-1, 1,-1}, {0,0,-1}, {1,0.5,0,1}}); // 7 оранжевый
 
     indices.insert(indices.end(), {0,1,2, 0,2,3}); // front
     indices.insert(indices.end(), {4,6,5, 4,7,6}); // back
@@ -47,6 +45,7 @@ void initCube() {
     indices.insert(indices.end(), {4,5,1, 4,1,0}); // bottom
 
     gCubeMesh = new Mesh(vertices, indices);
+    LOGI("Cube mesh created with %zu vertices, %zu indices", vertices.size(), indices.size());
 }
 
 extern "C" {
@@ -63,12 +62,13 @@ Java_com_example_modelinengine_MyGLRenderer_nativeInit(JNIEnv*, jobject) {
         LOGE("Failed to create shader program");
         return;
     }
+    LOGI("Shader program created successfully");
 
-    gMatCapTexture = createProceduralMatCapTexture();
     initCube();
 
     gModelMatrix = Mat4::identity();
     gViewMatrix = Mat4::lookAt(Vec3(0,2,5), Vec3(0,0,0), Vec3(0,1,0));
+    LOGI("View matrix set");
 }
 
 JNIEXPORT void JNICALL
@@ -78,30 +78,34 @@ Java_com_example_modelinengine_MyGLRenderer_nativeResize(JNIEnv*, jobject, jint 
     glViewport(0, 0, width, height);
     float aspect = (float)width / (float)height;
     gProjectionMatrix = Mat4::perspective(45.0f * M_PI / 180.0f, aspect, 0.1f, 100.0f);
+    LOGI("Resize: %dx%d, aspect=%f", width, height, aspect);
 }
 
 JNIEXPORT void JNICALL
 Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (gProgram == 0 || gCubeMesh == nullptr) return;
+    if (gProgram == 0 || gCubeMesh == nullptr) {
+        LOGE("Render: program or mesh is null");
+        return;
+    }
 
     glUseProgram(gProgram);
 
     Mat4 mvp = gProjectionMatrix * gViewMatrix * gModelMatrix;
     GLint mvpLoc = glGetUniformLocation(gProgram, "u_MVPMatrix");
+    if (mvpLoc == -1) {
+        LOGE("Uniform u_MVPMatrix not found");
+    }
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
 
-    Mat4 mv = gViewMatrix * gModelMatrix;
-    GLint mvLoc = glGetUniformLocation(gProgram, "u_MVMatrix");
-    glUniformMatrix4fv(mvLoc, 1, GL_FALSE, mv.data);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, gMatCapTexture);
-    GLint texLoc = glGetUniformLocation(gProgram, "u_MatCap");
-    glUniform1i(texLoc, 0);
-
     gCubeMesh->draw(gProgram);
+
+    // Проверка ошибок OpenGL
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        LOGE("OpenGL error: 0x%x", err);
+    }
 }
 
 }
