@@ -14,9 +14,11 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-static GLuint gProgram = 0;
+static GLuint gProgram = 0;          // Шейдер для граней (MatCap)
+static GLuint gEdgeProgram = 0;      // Простой шейдер для рёбер
 static GLuint gMatCapTexture = 0;
-static Mesh* gCubeMesh = nullptr;
+static Mesh* gCubeMesh = nullptr;    // Грани
+static Mesh* gCubeEdgesMesh = nullptr; // Рёбра
 
 static Mat4 gProjectionMatrix;
 static Mat4 gViewMatrix;
@@ -34,27 +36,42 @@ static float gLastX = 0, gLastY = 0;
 static bool gDragging = false;
 
 void initCube() {
+    // Серый цвет для всех вершин
+    float gray[4] = {0.7f, 0.7f, 0.7f, 1.0f};
+
     std::vector<Vertex> vertices;
-    std::vector<unsigned int> indices;
+    std::vector<unsigned int> indicesFaces;
+    std::vector<unsigned int> indicesEdges;
 
-    vertices.push_back({{-1,-1, 1}, {0,0,1}, {1,0,0,1}});
-    vertices.push_back({{ 1,-1, 1}, {0,0,1}, {0,1,0,1}});
-    vertices.push_back({{ 1, 1, 1}, {0,0,1}, {0,0,1,1}});
-    vertices.push_back({{-1, 1, 1}, {0,0,1}, {1,1,0,1}});
+    // 8 вершин куба
+    vertices.push_back({{-1,-1, 1}, {0,0,1}, {gray[0],gray[1],gray[2],gray[3]}}); // 0
+    vertices.push_back({{ 1,-1, 1}, {0,0,1}, {gray[0],gray[1],gray[2],gray[3]}}); // 1
+    vertices.push_back({{ 1, 1, 1}, {0,0,1}, {gray[0],gray[1],gray[2],gray[3]}}); // 2
+    vertices.push_back({{-1, 1, 1}, {0,0,1}, {gray[0],gray[1],gray[2],gray[3]}}); // 3
 
-    vertices.push_back({{-1,-1,-1}, {0,0,-1}, {1,0,1,1}});
-    vertices.push_back({{ 1,-1,-1}, {0,0,-1}, {0,1,1,1}});
-    vertices.push_back({{ 1, 1,-1}, {0,0,-1}, {0.5,0.5,0.5,1}});
-    vertices.push_back({{-1, 1,-1}, {0,0,-1}, {1,0.5,0,1}});
+    vertices.push_back({{-1,-1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}}); // 4
+    vertices.push_back({{ 1,-1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}}); // 5
+    vertices.push_back({{ 1, 1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}}); // 6
+    vertices.push_back({{-1, 1,-1}, {0,0,-1}, {gray[0],gray[1],gray[2],gray[3]}}); // 7
 
-    indices.insert(indices.end(), {0,1,2, 0,2,3});
-    indices.insert(indices.end(), {4,6,5, 4,7,6});
-    indices.insert(indices.end(), {4,0,3, 4,3,7});
-    indices.insert(indices.end(), {1,5,6, 1,6,2});
-    indices.insert(indices.end(), {3,2,6, 3,6,7});
-    indices.insert(indices.end(), {4,5,1, 4,1,0});
+    // Индексы для граней (треугольники)
+    indicesFaces.insert(indicesFaces.end(), {0,1,2, 0,2,3}); // front
+    indicesFaces.insert(indicesFaces.end(), {4,6,5, 4,7,6}); // back
+    indicesFaces.insert(indicesFaces.end(), {4,0,3, 4,3,7}); // left
+    indicesFaces.insert(indicesFaces.end(), {1,5,6, 1,6,2}); // right
+    indicesFaces.insert(indicesFaces.end(), {3,2,6, 3,6,7}); // top
+    indicesFaces.insert(indicesFaces.end(), {4,5,1, 4,1,0}); // bottom
 
-    gCubeMesh = new Mesh(vertices, indices);
+    // Индексы для рёбер (12 рёбер * 2 вершины)
+    // Передняя грань
+    indicesEdges.insert(indicesEdges.end(), {0,1, 1,2, 2,3, 3,0});
+    // Задняя грань
+    indicesEdges.insert(indicesEdges.end(), {4,5, 5,6, 6,7, 7,4});
+    // Соединяющие рёбра
+    indicesEdges.insert(indicesEdges.end(), {0,4, 1,5, 2,6, 3,7});
+
+    gCubeMesh = new Mesh(vertices, indicesFaces);
+    gCubeEdgesMesh = new Mesh(vertices, indicesEdges);
 }
 
 void updateViewMatrix() {
@@ -78,8 +95,9 @@ Java_com_example_modelinengine_MyGLRenderer_nativeInit(JNIEnv*, jobject) {
     glCullFace(GL_BACK);
 
     gProgram = createProgram(vertexShaderSource, fragmentShaderSource);
-    if (gProgram == 0) {
-        LOGE("Failed to create shader program");
+    gEdgeProgram = createProgram(edgeVertexShaderSource, edgeFragmentShaderSource);
+    if (gProgram == 0 || gEdgeProgram == 0) {
+        LOGE("Failed to create shader programs");
         return;
     }
 
@@ -105,6 +123,7 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
 
     if (gProgram == 0 || gCubeMesh == nullptr) return;
 
+    // === Рисуем грани ===
     glUseProgram(gProgram);
 
     Mat4 mvp = gProjectionMatrix * gViewMatrix * gModelMatrix;
@@ -120,7 +139,28 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     GLint texLoc = glGetUniformLocation(gProgram, "u_MatCap");
     glUniform1i(texLoc, 0);
 
-    gCubeMesh->draw(gProgram);
+    gCubeMesh->draw(gProgram, GL_TRIANGLES);
+
+    // === Рисуем рёбра ===
+    glUseProgram(gEdgeProgram);
+
+    mvpLoc = glGetUniformLocation(gEdgeProgram, "u_MVPMatrix");
+    glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
+
+    GLint colorLoc = glGetUniformLocation(gEdgeProgram, "u_Color");
+    glUniform4f(colorLoc, 0.0f, 0.0f, 0.0f, 1.0f); // Чёрный цвет
+
+    // Отключаем отсечение граней, чтобы все рёбра были видны
+    glDisable(GL_CULL_FACE);
+    // Полигональное смещение, чтобы линии рисовались поверх граней
+    glEnable(GL_POLYGON_OFFSET_LINE);
+    glPolygonOffset(-1.0f, -1.0f);
+
+    gCubeEdgesMesh->draw(gEdgeProgram, GL_LINES);
+
+    // Восстанавливаем состояние
+    glDisable(GL_POLYGON_OFFSET_LINE);
+    glEnable(GL_CULL_FACE);
 }
 
 JNIEXPORT void JNICALL
@@ -136,7 +176,6 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
             if (gDragging) {
                 float dx = x - gLastX;
                 float dy = y - gLastY;
-                // Инвертируем dx, чтобы движение пальца влево вращало объект влево
                 gYaw -= dx * 0.5f;
                 gPitch += dy * 0.5f;
                 if (gPitch > 89.0f) gPitch = 89.0f;
@@ -156,8 +195,6 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
 JNIEXPORT void JNICALL
 Java_com_example_modelinengine_MyGLRenderer_nativeOnScale(
         JNIEnv*, jobject, jfloat scaleFactor) {
-    // scaleFactor > 1 при увеличении (пальцы раздвигаются) — уменьшаем расстояние
-    // scaleFactor < 1 при уменьшении — увеличиваем расстояние
     gDistance /= scaleFactor;
     if (gDistance < 2.0f) gDistance = 2.0f;
     if (gDistance > 20.0f) gDistance = 20.0f;
