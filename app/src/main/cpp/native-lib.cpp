@@ -24,10 +24,10 @@ static Mat4 gModelMatrix;
 
 static int gWidth = 0, gHeight = 0;
 
-// Переменные для вращения камеры
-static float gYaw = 0.0f;      // Вокруг оси Y
-static float gPitch = 0.0f;    // Вокруг оси X
-static float gDistance = 5.0f; // Расстояние до центра
+// Параметры камеры
+static float gYaw = 0.0f;
+static float gPitch = 0.0f;
+static float gDistance = 5.0f;
 static Vec3 gTarget(0,0,0);
 
 static float gLastX = 0, gLastY = 0;
@@ -37,29 +37,27 @@ void initCube() {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
 
-    // Куб от -1 до 1 с нормалями и цветами
-    vertices.push_back({{-1,-1, 1}, {0,0,1}, {1,0,0,1}}); // 0
-    vertices.push_back({{ 1,-1, 1}, {0,0,1}, {0,1,0,1}}); // 1
-    vertices.push_back({{ 1, 1, 1}, {0,0,1}, {0,0,1,1}}); // 2
-    vertices.push_back({{-1, 1, 1}, {0,0,1}, {1,1,0,1}}); // 3
+    vertices.push_back({{-1,-1, 1}, {0,0,1}, {1,0,0,1}});
+    vertices.push_back({{ 1,-1, 1}, {0,0,1}, {0,1,0,1}});
+    vertices.push_back({{ 1, 1, 1}, {0,0,1}, {0,0,1,1}});
+    vertices.push_back({{-1, 1, 1}, {0,0,1}, {1,1,0,1}});
 
-    vertices.push_back({{-1,-1,-1}, {0,0,-1}, {1,0,1,1}}); // 4
-    vertices.push_back({{ 1,-1,-1}, {0,0,-1}, {0,1,1,1}}); // 5
-    vertices.push_back({{ 1, 1,-1}, {0,0,-1}, {0.5,0.5,0.5,1}}); // 6
-    vertices.push_back({{-1, 1,-1}, {0,0,-1}, {1,0.5,0,1}}); // 7
+    vertices.push_back({{-1,-1,-1}, {0,0,-1}, {1,0,1,1}});
+    vertices.push_back({{ 1,-1,-1}, {0,0,-1}, {0,1,1,1}});
+    vertices.push_back({{ 1, 1,-1}, {0,0,-1}, {0.5,0.5,0.5,1}});
+    vertices.push_back({{-1, 1,-1}, {0,0,-1}, {1,0.5,0,1}});
 
-    indices.insert(indices.end(), {0,1,2, 0,2,3}); // front
-    indices.insert(indices.end(), {4,6,5, 4,7,6}); // back
-    indices.insert(indices.end(), {4,0,3, 4,3,7}); // left
-    indices.insert(indices.end(), {1,5,6, 1,6,2}); // right
-    indices.insert(indices.end(), {3,2,6, 3,6,7}); // top
-    indices.insert(indices.end(), {4,5,1, 4,1,0}); // bottom
+    indices.insert(indices.end(), {0,1,2, 0,2,3});
+    indices.insert(indices.end(), {4,6,5, 4,7,6});
+    indices.insert(indices.end(), {4,0,3, 4,3,7});
+    indices.insert(indices.end(), {1,5,6, 1,6,2});
+    indices.insert(indices.end(), {3,2,6, 3,6,7});
+    indices.insert(indices.end(), {4,5,1, 4,1,0});
 
     gCubeMesh = new Mesh(vertices, indices);
 }
 
 void updateViewMatrix() {
-    // Преобразуем сферические координаты в декартовы
     float radYaw = gYaw * M_PI / 180.0f;
     float radPitch = gPitch * M_PI / 180.0f;
     Vec3 eye(
@@ -138,9 +136,9 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
             if (gDragging) {
                 float dx = x - gLastX;
                 float dy = y - gLastY;
-                gYaw += dx * 0.5f;
+                // Инвертируем dx, чтобы движение пальца влево вращало объект влево
+                gYaw -= dx * 0.5f;
                 gPitch += dy * 0.5f;
-                // Ограничим pitch, чтобы не переворачивать камеру
                 if (gPitch > 89.0f) gPitch = 89.0f;
                 if (gPitch < -89.0f) gPitch = -89.0f;
                 updateViewMatrix();
@@ -153,6 +151,17 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
             gDragging = false;
             break;
     }
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativeOnScale(
+        JNIEnv*, jobject, jfloat scaleFactor) {
+    // scaleFactor > 1 при увеличении (пальцы раздвигаются) — уменьшаем расстояние
+    // scaleFactor < 1 при уменьшении — увеличиваем расстояние
+    gDistance /= scaleFactor;
+    if (gDistance < 2.0f) gDistance = 2.0f;
+    if (gDistance > 20.0f) gDistance = 20.0f;
+    updateViewMatrix();
 }
 
 } // extern "C"
