@@ -37,8 +37,8 @@ void main() {
     vec2 matcapCoord = normal.xy * 0.5 + 0.5;
     vec4 matcapColor = texture(u_MatCap, matcapCoord);
     
-    // Гарантируем, что цвет не будет ниже определённого порога
-    float ambient = 0.5;
+    // Добавляем ambient для гарантии, но теперь текстура сама светлая
+    float ambient = 0.4;
     vec4 litColor = vec4(max(matcapColor.rgb, vec3(ambient)), 1.0);
     fragColor = litColor * v_Color;
 }
