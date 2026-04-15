@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(native-lib SHARED
         native-lib.cpp
+        GLUtils.cpp
+        Mesh.cpp
+        MatCapTexture.cpp
 )
 
 find_library(log-lib log)
