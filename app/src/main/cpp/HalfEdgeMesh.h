@@ -13,7 +13,7 @@ struct VertexHE {
 };
 
 struct Face {
-    std::vector<int> vertexIndices; // индексы вершин в массиве
+    std::vector<int> vertexIndices;
     Vec3 normal;
     bool selected;
     Face() : selected(false) {}
@@ -27,16 +27,15 @@ public:
     void createCube();
     void drawFaces(GLuint program, GLenum mode);
     void drawSelectedFaces(GLuint program, GLenum mode);
+    void drawEdges(GLuint program, GLenum mode);
 
-    // Ray casting: возвращает индекс грани, в которую попал луч из точки касания
     int pickFace(const Mat4& mvp, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY);
-
     void toggleFaceSelection(int faceIndex);
 
 private:
     std::vector<VertexHE> vertices;
-    std::vector<unsigned int> faceIndices;      // индексы для всех граней (треугольники)
-    std::vector<unsigned int> selectedIndices;  // индексы для выделенных граней
+    std::vector<unsigned int> faceIndices;
+    std::vector<unsigned int> selectedIndices;
     std::vector<Face> faces;
 
     GLuint VAO, VBO, EBO;
