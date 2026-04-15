@@ -63,11 +63,8 @@ void initCube() {
     indicesFaces.insert(indicesFaces.end(), {4,5,1, 4,1,0}); // bottom
 
     // Индексы для рёбер (12 рёбер * 2 вершины)
-    // Передняя грань
     indicesEdges.insert(indicesEdges.end(), {0,1, 1,2, 2,3, 3,0});
-    // Задняя грань
     indicesEdges.insert(indicesEdges.end(), {4,5, 5,6, 6,7, 7,4});
-    // Соединяющие рёбра
     indicesEdges.insert(indicesEdges.end(), {0,4, 1,5, 2,6, 3,7});
 
     gCubeMesh = new Mesh(vertices, indicesFaces);
@@ -150,16 +147,13 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     GLint colorLoc = glGetUniformLocation(gEdgeProgram, "u_Color");
     glUniform4f(colorLoc, 0.0f, 0.0f, 0.0f, 1.0f); // Чёрный цвет
 
-    // Отключаем отсечение граней, чтобы все рёбра были видны
     glDisable(GL_CULL_FACE);
-    // Полигональное смещение, чтобы линии рисовались поверх граней
-    glEnable(GL_POLYGON_OFFSET_LINE);
+    glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(-1.0f, -1.0f);
 
     gCubeEdgesMesh->draw(gEdgeProgram, GL_LINES);
 
-    // Восстанавливаем состояние
-    glDisable(GL_POLYGON_OFFSET_LINE);
+    glDisable(GL_POLYGON_OFFSET_FILL);
     glEnable(GL_CULL_FACE);
 }
 
