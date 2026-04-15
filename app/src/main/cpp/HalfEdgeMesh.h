@@ -31,6 +31,7 @@ public:
 
     int pickFace(const Mat4& mvp, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY);
     void toggleFaceSelection(int faceIndex);
+    void subdivideSelected();
 
 private:
     std::vector<VertexHE> vertices;
@@ -43,6 +44,7 @@ private:
 
     void updateGPUBuffers();
     void updateSelectedBuffers();
+    int addVertex(const VertexHE& v);
 };
 
 #endif
