@@ -21,14 +21,13 @@ GLuint createProceduralMatCapTexture() {
                 continue;
             }
 
-            // Используем нормаль для создания освещения, но гарантируем яркость от 0.7 до 1.0
-            float front = fmax(0.0f, nz);
-            float sideX = fabs(nx);
-            float sideY = fabs(ny);
-            
-            float brightness = 0.7f + 0.3f * front + 0.1f * sideX + 0.1f * sideY;
-            if (brightness > 1.0f) brightness = 1.0f;
-            // Минимальная яркость теперь 0.7, так что тёмных областей не будет
+            // Используем z-компоненту для имитации освещения сверху-спереди
+            // Делаем яркость почти постоянной с небольшим затемнением по краям (когда |nx| или |ny| близки к 1)
+            float edgeDarken = 1.0f - 0.15f * (fabs(nx) + fabs(ny)) / 2.0f; // от 0.85 до 1.0
+            float brightness = 0.9f + 0.1f * nz; // от 0.8 до 1.0
+            brightness *= edgeDarken;
+            // Гарантируем, что яркость не меньше 0.8
+            if (brightness < 0.8f) brightness = 0.8f;
 
             int idx = (y * size + x) * 4;
             unsigned char gray = (unsigned char)(brightness * 255);
