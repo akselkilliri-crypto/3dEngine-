@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 class MainActivity : AppCompatActivity() {
 
@@ -14,9 +15,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
 
         renderer = MyGLRenderer(this)
-        glSurfaceView = GLSurfaceView(this).apply {
+        glSurfaceView = findViewById<GLSurfaceView>(R.id.glSurfaceView).apply {
             setEGLContextClientVersion(3)
             setEGLConfigChooser(8, 8, 8, 8, 16, 4)
             setRenderer(renderer)
@@ -25,13 +27,16 @@ class MainActivity : AppCompatActivity() {
 
         scaleGestureDetector = ScaleGestureDetector(this, ScaleListener())
 
-        setContentView(glSurfaceView)
+        val fabSubdivide = findViewById<FloatingActionButton>(R.id.fabSubdivide)
+        fabSubdivide.setOnClickListener {
+            renderer.nativeSubdivide()
+            glSurfaceView.requestRender()
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         scaleGestureDetector.onTouchEvent(event)
 
-        // Если не масштабирование и не обработано детектором, передаём как драг
         if (!scaleGestureDetector.isInProgress) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN,
