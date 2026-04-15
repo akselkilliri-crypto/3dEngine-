@@ -2,11 +2,13 @@
 #include <android/log.h>
 #include <cmath>
 #include <algorithm>
+#include <map>
+#include <set>
 
 #define LOG_TAG "HalfEdgeMesh"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-HalfEdgeMesh::HalfEdgeMesh() : VAO(0), VBO(0), EBO(0), dirty(true) {}
+HalfEdgeMesh::HalfEdgeMesh() : VAO(0), VBO(0), EBO(0), dirty(true), edgesDirty(true) {}
 
 HalfEdgeMesh::~HalfEdgeMesh() {
     if (VAO) glDeleteVertexArrays(1, &VAO);
@@ -15,6 +17,7 @@ HalfEdgeMesh::~HalfEdgeMesh() {
 }
 
 int HalfEdgeMesh::addVertex(const VertexHE& v) {
+    // Проверяем по позиции и нормали (для куба достаточно позиции)
     for (size_t i = 0; i < vertices.size(); ++i) {
         if (vertices[i].position.x == v.position.x &&
             vertices[i].position.y == v.position.y &&
@@ -24,6 +27,26 @@ int HalfEdgeMesh::addVertex(const VertexHE& v) {
     }
     vertices.push_back(v);
     return vertices.size() - 1;
+}
+
+void HalfEdgeMesh::rebuildEdgeIndices() {
+    edgeIndices.clear();
+    // Используем set для уникальных рёбер (неориентированных)
+    std::set<std::pair<int,int>> edges;
+    for (const auto& face : faces) {
+        int n = face.vertexIndices.size();
+        for (int i = 0; i < n; ++i) {
+            int a = face.vertexIndices[i];
+            int b = face.vertexIndices[(i+1)%n];
+            if (a > b) std::swap(a,b);
+            edges.insert({a,b});
+        }
+    }
+    for (const auto& e : edges) {
+        edgeIndices.push_back(e.first);
+        edgeIndices.push_back(e.second);
+    }
+    edgesDirty = false;
 }
 
 void HalfEdgeMesh::createCube() {
@@ -70,6 +93,7 @@ void HalfEdgeMesh::createCube() {
     }
 
     dirty = true;
+    edgesDirty = true;
     LOGI("Cube created with %zu vertices, %zu faces", vertices.size(), faces.size());
 }
 
@@ -135,18 +159,35 @@ void HalfEdgeMesh::drawSelectedFaces(GLuint program, GLenum mode) {
 }
 
 void HalfEdgeMesh::drawEdges(GLuint program, GLenum mode) {
+    if (edgesDirty) rebuildEdgeIndices();
+    if (edgeIndices.empty()) return;
     updateGPUBuffers();
     glBindVertexArray(VAO);
-    static const unsigned int edgeIndices[] = {
-        0,1, 1,2, 2,3, 3,0,
-        4,5, 5,6, 6,7, 7,4,
-        0,4, 1,5, 2,6, 3,7
-    };
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(edgeIndices), edgeIndices, GL_STATIC_DRAW);
-    glDrawElements(mode, 24, GL_UNSIGNED_INT, 0);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, edgeIndices.size() * sizeof(unsigned int), edgeIndices.data(), GL_STATIC_DRAW);
+    glDrawElements(mode, edgeIndices.size(), GL_UNSIGNED_INT, 0);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, faceIndices.size() * sizeof(unsigned int), faceIndices.data(), GL_STATIC_DRAW);
     glBindVertexArray(0);
+}
+
+bool HalfEdgeMesh::rayIntersectsTriangle(const Vec3& rayOrigin, const Vec3& rayDir,
+                                         const Vec3& v0, const Vec3& v1, const Vec3& v2,
+                                         float& t) {
+    const float EPSILON = 1e-6f;
+    Vec3 edge1 = v1 - v0;
+    Vec3 edge2 = v2 - v0;
+    Vec3 h = rayDir.cross(edge2);
+    float a = edge1.dot(h);
+    if (fabs(a) < EPSILON) return false;
+    float f = 1.0f / a;
+    Vec3 s = rayOrigin - v0;
+    float u = f * s.dot(h);
+    if (u < 0.0f || u > 1.0f) return false;
+    Vec3 q = s.cross(edge1);
+    float v = f * rayDir.dot(q);
+    if (v < 0.0f || u + v > 1.0f) return false;
+    t = f * edge2.dot(q);
+    return (t > EPSILON);
 }
 
 int HalfEdgeMesh::pickFace(const Mat4& mvp, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY) {
@@ -167,48 +208,32 @@ int HalfEdgeMesh::pickFace(const Mat4& mvp, const Mat4& view, int screenWidth, i
     Vec3 rayDir(farPointWorld.x - nearPointWorld.x, farPointWorld.y - nearPointWorld.y, farPointWorld.z - nearPointWorld.z);
     rayDir = rayDir.normalized();
 
-    float tmin = -1e9f, tmax = 1e9f;
-    float t1, t2;
-    if (fabs(rayDir.x) > 1e-6f) {
-        t1 = (-1.0f - rayOrigin.x) / rayDir.x;
-        t2 = (1.0f - rayOrigin.x) / rayDir.x;
-        if (t1 > t2) std::swap(t1, t2);
-        tmin = std::max(tmin, t1);
-        tmax = std::min(tmax, t2);
-        if (tmin > tmax) return -1;
-    } else if (rayOrigin.x < -1.0f || rayOrigin.x > 1.0f) return -1;
+    int closestFace = -1;
+    float minT = 1e9f;
 
-    if (fabs(rayDir.y) > 1e-6f) {
-        t1 = (-1.0f - rayOrigin.y) / rayDir.y;
-        t2 = (1.0f - rayOrigin.y) / rayDir.y;
-        if (t1 > t2) std::swap(t1, t2);
-        tmin = std::max(tmin, t1);
-        tmax = std::min(tmax, t2);
-        if (tmin > tmax) return -1;
-    } else if (rayOrigin.y < -1.0f || rayOrigin.y > 1.0f) return -1;
+    // Перебираем все грани
+    for (size_t i = 0; i < faces.size(); ++i) {
+        const Face& face = faces[i];
+        if (face.vertexIndices.size() < 3) continue;
 
-    if (fabs(rayDir.z) > 1e-6f) {
-        t1 = (-1.0f - rayOrigin.z) / rayDir.z;
-        t2 = (1.0f - rayOrigin.z) / rayDir.z;
-        if (t1 > t2) std::swap(t1, t2);
-        tmin = std::max(tmin, t1);
-        tmax = std::min(tmax, t2);
-        if (tmin > tmax) return -1;
-    } else if (rayOrigin.z < -1.0f || rayOrigin.z > 1.0f) return -1;
-
-    if (tmin < 0) return -1;
-
-    Vec3 hit = rayOrigin + rayDir * tmin;
-    float dx = fabs(hit.x) - 1.0f;
-    float dy = fabs(hit.y) - 1.0f;
-    float dz = fabs(hit.z) - 1.0f;
-    if (fabs(dx) < 0.01f) {
-        return (hit.x > 0) ? 3 : 2;
-    } else if (fabs(dy) < 0.01f) {
-        return (hit.y > 0) ? 4 : 5;
-    } else {
-        return (hit.z > 0) ? 0 : 1;
+        // Триангулируем полигон (для квадрата два треугольника)
+        for (size_t j = 1; j < face.vertexIndices.size() - 1; ++j) {
+            int idx0 = face.vertexIndices[0];
+            int idx1 = face.vertexIndices[j];
+            int idx2 = face.vertexIndices[j+1];
+            Vec3 v0 = vertices[idx0].position;
+            Vec3 v1 = vertices[idx1].position;
+            Vec3 v2 = vertices[idx2].position;
+            float t;
+            if (rayIntersectsTriangle(rayOrigin, rayDir, v0, v1, v2, t)) {
+                if (t < minT) {
+                    minT = t;
+                    closestFace = i;
+                }
+            }
+        }
     }
+    return closestFace;
 }
 
 void HalfEdgeMesh::toggleFaceSelection(int faceIndex) {
@@ -284,6 +309,7 @@ void HalfEdgeMesh::subdivideSelected() {
 
     faces = newFaces;
 
+    // Перестраиваем faceIndices
     faceIndices.clear();
     for (size_t i = 0; i < faces.size(); ++i) {
         const auto& f = faces[i];
@@ -298,6 +324,7 @@ void HalfEdgeMesh::subdivideSelected() {
     }
 
     dirty = true;
+    edgesDirty = true;
     updateSelectedBuffers();
-    LOGI("Subdivision complete. Total faces: %zu", faces.size());
+    LOGI("Subdivision complete. Total faces: %zu, vertices: %zu", faces.size(), vertices.size());
 }
