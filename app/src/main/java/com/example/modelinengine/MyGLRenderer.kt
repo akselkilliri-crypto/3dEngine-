@@ -2,6 +2,7 @@ package com.example.modelinengine
 
 import android.content.Context
 import android.opengl.GLSurfaceView
+import android.view.MotionEvent
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
@@ -16,6 +17,7 @@ class MyGLRenderer(private val context: Context) : GLSurfaceView.Renderer {
     external fun nativeInit()
     external fun nativeResize(width: Int, height: Int)
     external fun nativeRender()
+    external fun nativeOnTouchEvent(action: Int, x: Float, y: Float)
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         nativeInit()
@@ -27,5 +29,12 @@ class MyGLRenderer(private val context: Context) : GLSurfaceView.Renderer {
 
     override fun onDrawFrame(gl: GL10?) {
         nativeRender()
+    }
+
+    fun handleTouchEvent(event: MotionEvent) {
+        val action = event.actionMasked
+        val x = event.x
+        val y = event.y
+        nativeOnTouchEvent(action, x, y)
     }
 }
