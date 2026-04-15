@@ -21,16 +21,14 @@ GLuint createProceduralMatCapTexture() {
                 continue;
             }
 
-            // Нормализованный вектор (nx, ny, nz) используется для генерации освещения
-            // Создаём более равномерное освещение с акцентом на переднюю полусферу
-            float front = fmax(0.0f, nz);                    // 0..1, 1 когда смотрит прямо на камеру
+            // Используем нормаль для создания освещения, но гарантируем яркость от 0.7 до 1.0
+            float front = fmax(0.0f, nz);
             float sideX = fabs(nx);
             float sideY = fabs(ny);
             
-            // Базовая яркость от 0.5 до 1.0, зависит от ориентации
-            float brightness = 0.6f + 0.4f * front + 0.2f * sideX + 0.2f * sideY;
+            float brightness = 0.7f + 0.3f * front + 0.1f * sideX + 0.1f * sideY;
             if (brightness > 1.0f) brightness = 1.0f;
-            if (brightness < 0.4f) brightness = 0.4f;  // никогда не будет совсем тёмным
+            // Минимальная яркость теперь 0.7, так что тёмных областей не будет
 
             int idx = (y * size + x) * 4;
             unsigned char gray = (unsigned char)(brightness * 255);
