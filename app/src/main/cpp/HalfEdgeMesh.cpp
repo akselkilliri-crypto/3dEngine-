@@ -187,30 +187,32 @@ bool HalfEdgeMesh::rayIntersectsTriangle(const Vec3& rayOrigin, const Vec3& rayD
     return (t > EPSILON);
 }
 
+// Функция unproject для преобразования экранных координат в мировые
+static Vec3 unProject(float winX, float winY, float winZ,
+                      const Mat4& proj, const Mat4& view,
+                      int viewport[4]) {
+    Mat4 inv = Mat4::inverse(proj * view);
+    float ndcX = (winX - viewport[0]) / viewport[2] * 2.0f - 1.0f;
+    float ndcY = (winY - viewport[1]) / viewport[3] * 2.0f - 1.0f;
+    float ndcZ = winZ * 2.0f - 1.0f;
+    Vec4 in(ndcX, ndcY, ndcZ, 1.0f);
+    Vec4 out = inv * in;
+    if (out.w == 0.0f) return Vec3(0,0,0);
+    return Vec3(out.x / out.w, out.y / out.w, out.z / out.w);
+}
+
 int HalfEdgeMesh::pickFace(const Mat4& proj, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY) {
-    // Преобразуем координаты касания в NDC
-    float ndcX = (2.0f * touchX) / screenWidth - 1.0f;
-    float ndcY = 1.0f - (2.0f * touchY) / screenHeight;
+    // viewport: (0,0,screenWidth,screenHeight)
+    int viewport[4] = {0, 0, screenWidth, screenHeight};
 
-    // Строим луч в мировых координатах, используя обратную проекцию и обратный вид
-    Mat4 invProj = Mat4::inverse(proj);
-    Mat4 invView = Mat4::inverse(view);
+    // Инвертируем Y, так как в OpenGL (0,0) внизу слева, а касание сверху
+    float glY = screenHeight - touchY;
 
-    // Точка на ближней плоскости в clip space
-    Vec4 nearClip(ndcX, ndcY, -1.0f, 1.0f);
-    Vec4 nearEye = invProj * nearClip;
-    nearEye = Vec4(nearEye.x / nearEye.w, nearEye.y / nearEye.w, nearEye.z / nearEye.w, 1.0f);
-    Vec4 nearWorld = invView * nearEye;
+    Vec3 nearWorld = unProject(touchX, glY, 0.0f, proj, view, viewport);
+    Vec3 farWorld  = unProject(touchX, glY, 1.0f, proj, view, viewport);
 
-    // Точка на дальней плоскости
-    Vec4 farClip(ndcX, ndcY, 1.0f, 1.0f);
-    Vec4 farEye = invProj * farClip;
-    farEye = Vec4(farEye.x / farEye.w, farEye.y / farEye.w, farEye.z / farEye.w, 1.0f);
-    Vec4 farWorld = invView * farEye;
-
-    Vec3 rayOrigin(nearWorld.x, nearWorld.y, nearWorld.z);
-    Vec3 rayDir(farWorld.x - nearWorld.x, farWorld.y - nearWorld.y, farWorld.z - nearWorld.z);
-    rayDir = rayDir.normalized();
+    Vec3 rayOrigin = nearWorld;
+    Vec3 rayDir = (farWorld - nearWorld).normalized();
 
     int closestFace = -1;
     float minT = 1e9f;
@@ -220,7 +222,7 @@ int HalfEdgeMesh::pickFace(const Mat4& proj, const Mat4& view, int screenWidth, 
         const Face& face = faces[i];
         if (face.vertexIndices.size() < 3) continue;
 
-        // Триангуляция полигона (для квадрата два треугольника)
+        // Триангуляция (для квадрата два треугольника)
         for (size_t j = 1; j < face.vertexIndices.size() - 1; ++j) {
             int idx0 = face.vertexIndices[0];
             int idx1 = face.vertexIndices[j];
