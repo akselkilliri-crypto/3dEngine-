@@ -5,9 +5,12 @@
 #include <set>
 #include <map>
 #include <vector>
+#include <unordered_set>
+#include <queue>
 
 #define LOG_TAG "HalfEdgeMesh"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 HalfEdgeMesh::HalfEdgeMesh() : VAO(0), VBO(0), EBO(0), dirty(true), edgesDirty(true) {}
 
@@ -327,7 +330,7 @@ void HalfEdgeMesh::subdivideSelected() {
     LOGI("Subdivision complete. Total faces: %zu, vertices: %zu", faces.size(), vertices.size());
 }
 
-// ========== БЕЗОПАСНЫЙ mergeSelected ==========
+// ========== НАДЁЖНЫЙ mergeSelected ==========
 void HalfEdgeMesh::mergeSelected() {
     // Группируем выделенные грани по нормали (плоскости)
     std::map<Vec3, std::vector<int>> groups;
@@ -342,6 +345,7 @@ void HalfEdgeMesh::mergeSelected() {
     if (groups.empty()) return;
 
     std::vector<Face> newFaces;
+    // Невыделенные грани сохраняем
     for (size_t i = 0; i < faces.size(); ++i) {
         if (!faces[i].selected) newFaces.push_back(faces[i]);
     }
@@ -353,7 +357,7 @@ void HalfEdgeMesh::mergeSelected() {
             continue;
         }
 
-        // Подсчёт рёбер
+        // Подсчёт рёбер (неориентированных)
         std::map<std::pair<int,int>, int> edgeCount;
         for (int faceIdx : group) {
             const Face& f = faces[faceIdx];
@@ -366,28 +370,32 @@ void HalfEdgeMesh::mergeSelected() {
             }
         }
 
-        // Внешние рёбра (встречаются 1 раз)
+        // Внешние рёбра
         std::vector<std::pair<int,int>> outerEdges;
         for (const auto& ec : edgeCount) {
             if (ec.second == 1) outerEdges.push_back(ec.first);
         }
 
         if (outerEdges.size() < 3) {
-            // Недостаточно рёбер для полигона — отмена
             for (int faceIdx : group) newFaces.push_back(faces[faceIdx]);
             continue;
         }
 
-        // Строим граф
+        // Строим граф смежности по внешним рёбрам
         std::map<int, std::vector<int>> adj;
         for (auto& e : outerEdges) {
             adj[e.first].push_back(e.second);
             adj[e.second].push_back(e.first);
         }
 
-        // Находим начальную вершину с двумя соседями
+        // Находим начальную вершину (любую с двумя соседями)
         int start = -1;
-        for (auto& a : adj) if (a.second.size() == 2) { start = a.first; break; }
+        for (auto& a : adj) {
+            if (a.second.size() == 2) {
+                start = a.first;
+                break;
+            }
+        }
         if (start == -1) {
             for (int faceIdx : group) newFaces.push_back(faces[faceIdx]);
             continue;
@@ -399,14 +407,17 @@ void HalfEdgeMesh::mergeSelected() {
         int curr = start;
         const int MAX_STEPS = 1000;
         int steps = 0;
-        std::set<int> visited;
+        std::unordered_set<int> visited;
         do {
             if (visited.count(curr)) break;
             visited.insert(curr);
             contour.push_back(curr);
             int next = -1;
             for (int nb : adj[curr]) {
-                if (nb != prev) { next = nb; break; }
+                if (nb != prev) {
+                    next = nb;
+                    break;
+                }
             }
             if (next == -1) break;
             prev = curr;
@@ -415,27 +426,7 @@ void HalfEdgeMesh::mergeSelected() {
         } while (curr != start && steps < MAX_STEPS);
 
         if (curr != start || contour.size() < 3) {
-            for (int faceIdx : group) newFaces.push_back(faces[faceIdx]);
-            continue;
-        }
-
-        // Проверка выпуклости (упрощённо: все повороты одного знака)
-        Vec3 normal = faces[group[0]].normal;
-        bool convex = true;
-        for (size_t i = 0; i < contour.size(); ++i) {
-            int i0 = contour[i];
-            int i1 = contour[(i+1)%contour.size()];
-            int i2 = contour[(i+2)%contour.size()];
-            Vec3 v0 = vertices[i0].position;
-            Vec3 v1 = vertices[i1].position;
-            Vec3 v2 = vertices[i2].position;
-            Vec3 e1 = v1 - v0;
-            Vec3 e2 = v2 - v1;
-            Vec3 cross = e1.cross(e2);
-            if (cross.dot(normal) < 0) { convex = false; break; }
-        }
-
-        if (!convex) {
+            LOGE("Merge: contour not closed or too small");
             for (int faceIdx : group) newFaces.push_back(faces[faceIdx]);
             continue;
         }
@@ -446,11 +437,12 @@ void HalfEdgeMesh::mergeSelected() {
         merged.normal = faces[group[0]].normal;
         merged.selected = false;
         newFaces.push_back(merged);
+        LOGI("Merged %zu faces into one with %zu vertices", group.size(), contour.size());
     }
 
     faces = std::move(newFaces);
 
-    // Перестраиваем faceIndices (веерная триангуляция)
+    // Триангуляция (веером)
     faceIndices.clear();
     for (size_t i = 0; i < faces.size(); ++i) {
         const auto& f = faces[i];
