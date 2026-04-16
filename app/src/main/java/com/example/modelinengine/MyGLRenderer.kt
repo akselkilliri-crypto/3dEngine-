@@ -20,6 +20,7 @@ class MyGLRenderer(private val context: Context) : GLSurfaceView.Renderer {
     external fun nativeOnTouchEvent(action: Int, x: Float, y: Float)
     external fun nativeOnScale(scaleFactor: Float)
     external fun nativeSubdivide()
+    external fun nativeMerge()
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         nativeInit()
