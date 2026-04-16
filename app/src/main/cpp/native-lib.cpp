@@ -185,4 +185,11 @@ Java_com_example_modelinengine_MyGLRenderer_nativeSubdivide(JNIEnv*, jobject) {
     }
 }
 
+JNIEXPORT void JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativeExtrude(JNIEnv*, jobject, jfloat distance) {
+    if (gMesh) {
+        gMesh->extrudeSelected(distance);
+    }
+}
+
 } // extern "C"
