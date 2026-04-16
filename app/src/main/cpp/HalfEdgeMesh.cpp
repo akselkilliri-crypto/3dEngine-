@@ -4,9 +4,7 @@
 #include <algorithm>
 #include <set>
 #include <map>
-#include <vector>
 #include <unordered_set>
-#include <queue>
 
 #define LOG_TAG "HalfEdgeMesh"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -330,119 +328,75 @@ void HalfEdgeMesh::subdivideSelected() {
     LOGI("Subdivision complete. Total faces: %zu, vertices: %zu", faces.size(), vertices.size());
 }
 
-// ========== НАДЁЖНЫЙ mergeSelected ==========
-void HalfEdgeMesh::mergeSelected() {
-    // Группируем выделенные грани по нормали (плоскости)
-    std::map<Vec3, std::vector<int>> groups;
-    for (size_t i = 0; i < faces.size(); ++i) {
-        if (faces[i].selected) {
-            Vec3 n = faces[i].normal;
-            Vec3 key(roundf(n.x*1000)/1000, roundf(n.y*1000)/1000, roundf(n.z*1000)/1000);
-            groups[key].push_back(i);
-        }
-    }
-
-    if (groups.empty()) return;
+// ========== НОВЫЙ МЕТОД extrudeSelected ==========
+void HalfEdgeMesh::extrudeSelected(float distance) {
+    if (distance == 0.0f) return;
 
     std::vector<Face> newFaces;
-    // Невыделенные грани сохраняем
+    std::vector<Face> facesToRemove;
+    std::vector<int> selectedFaceIndices;
+
     for (size_t i = 0; i < faces.size(); ++i) {
-        if (!faces[i].selected) newFaces.push_back(faces[i]);
+        if (faces[i].selected) {
+            selectedFaceIndices.push_back(i);
+            facesToRemove.push_back(faces[i]);
+        } else {
+            newFaces.push_back(faces[i]);
+        }
     }
 
-    for (auto& entry : groups) {
-        std::vector<int>& group = entry.second;
-        if (group.size() < 2) {
-            newFaces.push_back(faces[group[0]]);
-            continue;
+    if (selectedFaceIndices.empty()) return;
+
+    for (int faceIdx : selectedFaceIndices) {
+        const Face& face = faces[faceIdx];
+        int n = face.vertexIndices.size();
+        if (n < 3) continue;
+
+        Vec3 normal = face.normal;
+        float gray[4] = {0.7f, 0.7f, 0.7f, 1.0f};
+
+        // Создаём новые вершины, смещённые по нормали
+        std::vector<int> newVertices;
+        for (int i = 0; i < n; ++i) {
+            int oldIdx = face.vertexIndices[i];
+            Vec3 oldPos = vertices[oldIdx].position;
+            Vec3 newPos = oldPos + normal * distance;
+            VertexHE newVert;
+            newVert.position = newPos;
+            newVert.normal = normal; // для простоты нормаль та же
+            for (int c = 0; c < 4; ++c) newVert.color[c] = gray[c];
+            int newIdx = addVertex(newVert);
+            newVertices.push_back(newIdx);
         }
 
-        // Подсчёт рёбер (неориентированных)
-        std::map<std::pair<int,int>, int> edgeCount;
-        for (int faceIdx : group) {
-            const Face& f = faces[faceIdx];
-            int n = f.vertexIndices.size();
-            for (int j = 0; j < n; ++j) {
-                int a = f.vertexIndices[j];
-                int b = f.vertexIndices[(j+1)%n];
-                if (a > b) std::swap(a,b);
-                edgeCount[{a,b}]++;
-            }
+        // Боковые грани (каждое ребро даёт четырёхугольник)
+        for (int i = 0; i < n; ++i) {
+            int old0 = face.vertexIndices[i];
+            int old1 = face.vertexIndices[(i+1)%n];
+            int new0 = newVertices[i];
+            int new1 = newVertices[(i+1)%n];
+
+            Face side;
+            side.vertexIndices = {old0, old1, new1, new0};
+            // Вычисляем нормаль боковой грани (через cross product двух рёбер)
+            Vec3 e1 = vertices[old1].position - vertices[old0].position;
+            Vec3 e2 = vertices[new0].position - vertices[old0].position;
+            side.normal = e1.cross(e2).normalized();
+            side.selected = false;
+            newFaces.push_back(side);
         }
 
-        // Внешние рёбра
-        std::vector<std::pair<int,int>> outerEdges;
-        for (const auto& ec : edgeCount) {
-            if (ec.second == 1) outerEdges.push_back(ec.first);
-        }
-
-        if (outerEdges.size() < 3) {
-            for (int faceIdx : group) newFaces.push_back(faces[faceIdx]);
-            continue;
-        }
-
-        // Строим граф смежности по внешним рёбрам
-        std::map<int, std::vector<int>> adj;
-        for (auto& e : outerEdges) {
-            adj[e.first].push_back(e.second);
-            adj[e.second].push_back(e.first);
-        }
-
-        // Находим начальную вершину (любую с двумя соседями)
-        int start = -1;
-        for (auto& a : adj) {
-            if (a.second.size() == 2) {
-                start = a.first;
-                break;
-            }
-        }
-        if (start == -1) {
-            for (int faceIdx : group) newFaces.push_back(faces[faceIdx]);
-            continue;
-        }
-
-        // Обход контура
-        std::vector<int> contour;
-        int prev = -1;
-        int curr = start;
-        const int MAX_STEPS = 1000;
-        int steps = 0;
-        std::unordered_set<int> visited;
-        do {
-            if (visited.count(curr)) break;
-            visited.insert(curr);
-            contour.push_back(curr);
-            int next = -1;
-            for (int nb : adj[curr]) {
-                if (nb != prev) {
-                    next = nb;
-                    break;
-                }
-            }
-            if (next == -1) break;
-            prev = curr;
-            curr = next;
-            steps++;
-        } while (curr != start && steps < MAX_STEPS);
-
-        if (curr != start || contour.size() < 3) {
-            LOGE("Merge: contour not closed or too small");
-            for (int faceIdx : group) newFaces.push_back(faces[faceIdx]);
-            continue;
-        }
-
-        // Создаём объединённую грань
-        Face merged;
-        merged.vertexIndices = contour;
-        merged.normal = faces[group[0]].normal;
-        merged.selected = false;
-        newFaces.push_back(merged);
-        LOGI("Merged %zu faces into one with %zu vertices", group.size(), contour.size());
+        // Передняя грань (новые вершины в обратном порядке для правильной ориентации)
+        Face front;
+        front.vertexIndices = std::vector<int>(newVertices.rbegin(), newVertices.rend());
+        front.normal = normal;
+        front.selected = false;
+        newFaces.push_back(front);
     }
 
     faces = std::move(newFaces);
 
-    // Триангуляция (веером)
+    // Перестраиваем faceIndices (триангуляция)
     faceIndices.clear();
     for (size_t i = 0; i < faces.size(); ++i) {
         const auto& f = faces[i];
@@ -459,5 +413,5 @@ void HalfEdgeMesh::mergeSelected() {
     dirty = true;
     edgesDirty = true;
     updateSelectedBuffers();
-    LOGI("Merge complete. Total faces: %zu", faces.size());
+    LOGI("Extrude complete. Total faces: %zu", faces.size());
 }
