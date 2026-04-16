@@ -32,7 +32,7 @@ public:
     int pickFace(const Mat4& proj, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY);
     void toggleFaceSelection(int faceIndex);
     void subdivideSelected();
-    void mergeSelected();
+    void extrudeSelected(float distance);
 
 private:
     std::vector<VertexHE> vertices;
