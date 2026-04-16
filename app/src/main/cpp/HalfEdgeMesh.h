@@ -29,10 +29,10 @@ public:
     void drawSelectedFaces(GLuint program, GLenum mode);
     void drawEdges(GLuint program, GLenum mode);
 
-    // Теперь принимает отдельно матрицы проекции и вида
     int pickFace(const Mat4& proj, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY);
     void toggleFaceSelection(int faceIndex);
     void subdivideSelected();
+    void mergeSelected();
 
 private:
     std::vector<VertexHE> vertices;
