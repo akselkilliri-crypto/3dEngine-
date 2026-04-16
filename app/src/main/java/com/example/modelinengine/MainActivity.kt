@@ -1,9 +1,13 @@
 package com.example.modelinengine
 
+import android.app.AlertDialog
 import android.opengl.GLSurfaceView
 import android.os.Bundle
+import android.text.InputType
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import android.widget.EditText
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 
@@ -33,11 +37,35 @@ class MainActivity : AppCompatActivity() {
             glSurfaceView.requestRender()
         }
 
-        val fabMerge = findViewById<FloatingActionButton>(R.id.fabMerge)
-        fabMerge.setOnClickListener {
-            renderer.nativeMerge()
-            glSurfaceView.requestRender()
+        val fabExtrude = findViewById<FloatingActionButton>(R.id.fabExtrude)
+        fabExtrude.setOnClickListener {
+            showExtrudeDialog()
         }
+    }
+
+    private fun showExtrudeDialog() {
+        val input = EditText(this)
+        input.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        input.hint = "Расстояние (мм)"
+
+        AlertDialog.Builder(this)
+            .setTitle("Вытянуть полигон")
+            .setMessage("Введите длину вытягивания в миллиметрах:")
+            .setView(input)
+            .setPositiveButton("Применить") { _, _ ->
+                val text = input.text.toString()
+                if (text.isNotEmpty()) {
+                    try {
+                        val distance = text.toFloat()
+                        renderer.nativeExtrude(distance)
+                        glSurfaceView.requestRender()
+                    } catch (e: NumberFormatException) {
+                        Toast.makeText(this, "Некорректное число", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
