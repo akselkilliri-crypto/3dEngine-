@@ -20,6 +20,13 @@ struct Vec3 {
         return *this;
     }
     float dot(const Vec3& other) const { return x*other.x + y*other.y + z*other.z; }
+
+    // Оператор сравнения для использования в std::map
+    bool operator<(const Vec3& other) const {
+        if (x != other.x) return x < other.x;
+        if (y != other.y) return y < other.y;
+        return z < other.z;
+    }
 };
 
 struct Vec4 {
