@@ -32,6 +32,12 @@ class MainActivity : AppCompatActivity() {
             renderer.nativeSubdivide()
             glSurfaceView.requestRender()
         }
+
+        val fabMerge = findViewById<FloatingActionButton>(R.id.fabMerge)
+        fabMerge.setOnClickListener {
+            renderer.nativeMerge()
+            glSurfaceView.requestRender()
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
