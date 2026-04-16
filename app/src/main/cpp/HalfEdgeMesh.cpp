@@ -3,6 +3,8 @@
 #include <cmath>
 #include <algorithm>
 #include <set>
+#include <map>
+#include <vector>
 
 #define LOG_TAG "HalfEdgeMesh"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -187,7 +189,6 @@ bool HalfEdgeMesh::rayIntersectsTriangle(const Vec3& rayOrigin, const Vec3& rayD
     return (t > EPSILON);
 }
 
-// Функция unproject для преобразования экранных координат в мировые
 static Vec3 unProject(float winX, float winY, float winZ,
                       const Mat4& proj, const Mat4& view,
                       int viewport[4]) {
@@ -202,27 +203,19 @@ static Vec3 unProject(float winX, float winY, float winZ,
 }
 
 int HalfEdgeMesh::pickFace(const Mat4& proj, const Mat4& view, int screenWidth, int screenHeight, float touchX, float touchY) {
-    // viewport: (0,0,screenWidth,screenHeight)
     int viewport[4] = {0, 0, screenWidth, screenHeight};
-
-    // Инвертируем Y, так как в OpenGL (0,0) внизу слева, а касание сверху
     float glY = screenHeight - touchY;
-
     Vec3 nearWorld = unProject(touchX, glY, 0.0f, proj, view, viewport);
     Vec3 farWorld  = unProject(touchX, glY, 1.0f, proj, view, viewport);
-
     Vec3 rayOrigin = nearWorld;
     Vec3 rayDir = (farWorld - nearWorld).normalized();
 
     int closestFace = -1;
     float minT = 1e9f;
 
-    // Перебираем все грани и их треугольники
     for (size_t i = 0; i < faces.size(); ++i) {
         const Face& face = faces[i];
         if (face.vertexIndices.size() < 3) continue;
-
-        // Триангуляция (для квадрата два треугольника)
         for (size_t j = 1; j < face.vertexIndices.size() - 1; ++j) {
             int idx0 = face.vertexIndices[0];
             int idx1 = face.vertexIndices[j];
@@ -332,4 +325,119 @@ void HalfEdgeMesh::subdivideSelected() {
     edgesDirty = true;
     updateSelectedBuffers();
     LOGI("Subdivision complete. Total faces: %zu, vertices: %zu", faces.size(), vertices.size());
+}
+
+// ========== НОВЫЙ МЕТОД mergeSelected ==========
+void HalfEdgeMesh::mergeSelected() {
+    // Собираем индексы выделенных граней, сгруппированные по нормали
+    std::map<Vec3, std::vector<int>> groups;
+    for (size_t i = 0; i < faces.size(); ++i) {
+        if (faces[i].selected) {
+            Vec3 n = faces[i].normal;
+            // Нормализуем ключ, округляя до 3 знаков для сравнения
+            Vec3 key(roundf(n.x*1000)/1000, roundf(n.y*1000)/1000, roundf(n.z*1000)/1000);
+            groups[key].push_back(i);
+        }
+    }
+
+    if (groups.empty()) return;
+
+    std::vector<Face> newFaces;
+    // Копируем невыделенные грани
+    for (size_t i = 0; i < faces.size(); ++i) {
+        if (!faces[i].selected) newFaces.push_back(faces[i]);
+    }
+
+    // Для каждой группы с одинаковой нормалью строим объединённую грань
+    for (auto& entry : groups) {
+        std::vector<int>& group = entry.second;
+        if (group.size() < 2) {
+            // Одиночную выделенную грань оставляем как есть
+            newFaces.push_back(faces[group[0]]);
+            continue;
+        }
+
+        // Собираем все рёбра из выделенных граней
+        std::map<std::pair<int,int>, int> edgeCount;
+        for (int faceIdx : group) {
+            const Face& f = faces[faceIdx];
+            int n = f.vertexIndices.size();
+            for (int j = 0; j < n; ++j) {
+                int a = f.vertexIndices[j];
+                int b = f.vertexIndices[(j+1)%n];
+                if (a > b) std::swap(a,b);
+                edgeCount[{a,b}]++;
+            }
+        }
+
+        // Внешние рёбра — те, которые встречаются 1 раз
+        std::vector<std::pair<int,int>> outerEdges;
+        for (const auto& ec : edgeCount) {
+            if (ec.second == 1) outerEdges.push_back(ec.first);
+        }
+
+        if (outerEdges.empty()) continue;
+
+        // Строим цикл из внешних рёбер
+        std::vector<int> mergedVerts;
+        std::map<int, std::vector<int>> adj;
+        for (auto& e : outerEdges) {
+            adj[e.first].push_back(e.second);
+            adj[e.second].push_back(e.first);
+        }
+
+        int start = outerEdges[0].first;
+        int prev = -1;
+        int curr = start;
+        do {
+            mergedVerts.push_back(curr);
+            int next = -1;
+            for (int neighbor : adj[curr]) {
+                if (neighbor != prev) {
+                    next = neighbor;
+                    break;
+                }
+            }
+            prev = curr;
+            curr = next;
+        } while (curr != start && curr != -1);
+
+        if (mergedVerts.size() < 3) {
+            // Не удалось замкнуть, пропускаем группу
+            for (int faceIdx : group) newFaces.push_back(faces[faceIdx]);
+            continue;
+        }
+
+        // Удаляем дубликат начальной вершины в конце
+        if (mergedVerts.front() == mergedVerts.back()) mergedVerts.pop_back();
+
+        // Создаём объединённую грань
+        Face mergedFace;
+        mergedFace.vertexIndices = mergedVerts;
+        mergedFace.normal = faces[group[0]].normal;
+        mergedFace.selected = false;
+        newFaces.push_back(mergedFace);
+    }
+
+    faces = std::move(newFaces);
+
+    // Перестраиваем faceIndices для OpenGL
+    faceIndices.clear();
+    for (size_t i = 0; i < faces.size(); ++i) {
+        const auto& f = faces[i];
+        int n = f.vertexIndices.size();
+        if (n >= 3) {
+            // Триангуляция веером (подходит для выпуклых полигонов)
+            for (int j = 1; j < n - 1; ++j) {
+                faceIndices.push_back(f.vertexIndices[0]);
+                faceIndices.push_back(f.vertexIndices[j]);
+                faceIndices.push_back(f.vertexIndices[j+1]);
+            }
+        }
+    }
+
+    dirty = true;
+    edgesDirty = true;
+    updateSelectedBuffers();
+    LOGI("Merge complete. Total faces: %zu", faces.size());
 }
