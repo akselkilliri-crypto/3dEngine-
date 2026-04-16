@@ -21,13 +21,13 @@
         app:layout_constraintEnd_toEndOf="parent" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabMerge"
+        android:id="@+id/fabExtrude"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
-        android:contentDescription="Merge"
+        android:contentDescription="Extrude"
         app:fabSize="normal"
-        app:srcCompat="@android:drawable/ic_menu_edit"
+        app:srcCompat="@android:drawable/arrow_up_float"
         app:layout_constraintBottom_toTopOf="@id/fabSubdivide"
         app:layout_constraintEnd_toEndOf="parent" />
 
