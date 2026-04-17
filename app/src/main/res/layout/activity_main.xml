@@ -9,7 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Кнопка Детализация (+) -->
+    <!-- Кнопка Детализация (Subdivide) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabSubdivide"
         android:layout_width="wrap_content"
@@ -21,7 +21,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Кнопка Вытянуть (↑) -->
+    <!-- Кнопка Вытянуть/Вдавить (Extrude) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabExtrude"
         android:layout_width="wrap_content"
@@ -33,7 +33,7 @@
         app:layout_constraintBottom_toTopOf="@id/fabSubdivide"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Кнопка Манипулятор (↔) - переключение режима перемещения -->
+    <!-- Кнопка Манипулятор (режим перемещения) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabManipulator"
         android:layout_width="wrap_content"
@@ -45,5 +45,41 @@
         app:layout_constraintBottom_toTopOf="@id/fabExtrude"
         app:layout_constraintEnd_toEndOf="parent"
         app:backgroundTint="@color/design_default_color_primary" />
+
+    <!-- Кнопка Удалить (Delete) -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabDelete"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:contentDescription="Delete"
+        app:fabSize="normal"
+        app:srcCompat="@android:drawable/ic_menu_delete"
+        app:layout_constraintBottom_toTopOf="@id/fabManipulator"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Кнопка Сгладить (Smooth) -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabSmooth"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:contentDescription="Smooth"
+        app:fabSize="normal"
+        app:srcCompat="@android:drawable/ic_menu_slideshow"
+        app:layout_constraintBottom_toTopOf="@id/fabDelete"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Кнопка Сброс (Reset) -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabReset"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:contentDescription="Reset"
+        app:fabSize="normal"
+        app:srcCompat="@android:drawable/ic_menu_revert"
+        app:layout_constraintBottom_toTopOf="@id/fabSmooth"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
