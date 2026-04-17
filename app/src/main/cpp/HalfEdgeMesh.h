@@ -33,6 +33,13 @@ public:
     void toggleFaceSelection(int faceIndex);
     void subdivideSelected();
     void extrudeSelected(float distance);
+    void deleteSelected();
+    void smoothMesh();
+    void resetToCube();
+
+    int getSelectedVertex() const;
+    bool getVertexPosition(int idx, Vec3& outPos) const;
+    void moveVertex(int idx, const Vec3& newPos);
 
 private:
     std::vector<VertexHE> vertices;
