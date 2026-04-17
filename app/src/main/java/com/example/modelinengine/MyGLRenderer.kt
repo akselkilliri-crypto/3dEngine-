@@ -21,7 +21,7 @@ class MyGLRenderer(private val context: Context) : GLSurfaceView.Renderer {
     external fun nativeOnScale(scaleFactor: Float)
     external fun nativeSubdivide()
     external fun nativeExtrude(distance: Float)
-    external fun nativePan(dx: Float, dy: Float, screenWidth: Int, screenHeight: Int)
+    external fun nativeSetManipulatorMode(enabled: Boolean)
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         nativeInit()
