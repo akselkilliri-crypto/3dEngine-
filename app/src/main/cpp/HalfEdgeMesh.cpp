@@ -328,14 +328,14 @@ void HalfEdgeMesh::subdivideSelected() {
     LOGI("Subdivision complete. Total faces: %zu, vertices: %zu", faces.size(), vertices.size());
 }
 
-// ========== ИСПРАВЛЕННЫЙ extrudeSelected ==========
+// ========== ИСПРАВЛЕННЫЙ extrudeSelected (поддержка отрицательных значений) ==========
 void HalfEdgeMesh::extrudeSelected(float distance) {
-    if (distance == 0.0f) return;
+    if (fabs(distance) < 1e-5f) return;
 
     std::vector<Face> newFaces;
     std::vector<int> selectedFaceIndices;
 
-    // Сохраняем индексы выделенных граней
+    // Сохраняем невыделенные грани
     for (size_t i = 0; i < faces.size(); ++i) {
         if (faces[i].selected) {
             selectedFaceIndices.push_back(i);
@@ -346,6 +346,9 @@ void HalfEdgeMesh::extrudeSelected(float distance) {
 
     if (selectedFaceIndices.empty()) return;
 
+    // Направление смещения: положительное distance — по нормали, отрицательное — против
+    bool outward = (distance > 0.0f);
+
     for (int faceIdx : selectedFaceIndices) {
         const Face& face = faces[faceIdx];
         int n = face.vertexIndices.size();
@@ -354,7 +357,7 @@ void HalfEdgeMesh::extrudeSelected(float distance) {
         Vec3 normal = face.normal;
         float gray[4] = {0.7f, 0.7f, 0.7f, 1.0f};
 
-        // 1. Создаём новые вершины, смещённые по нормали
+        // 1. Создаём новые вершины, смещённые на distance вдоль нормали
         std::vector<int> newVertices;
         for (int i = 0; i < n; ++i) {
             int oldIdx = face.vertexIndices[i];
@@ -368,20 +371,29 @@ void HalfEdgeMesh::extrudeSelected(float distance) {
             newVertices.push_back(newIdx);
         }
 
-        // 2. Исходная грань остаётся, но с обратным порядком вершин
+        // 2. Исходная грань остаётся на месте.
+        //    При вытягивании наружу (outward) она должна смотреть внутрь (обратный порядок вершин).
+        //    При вдавливании (inward) она остаётся как есть (смотрит наружу).
         Face backFace = face;
-        std::reverse(backFace.vertexIndices.begin(), backFace.vertexIndices.end());
+        if (outward) {
+            std::reverse(backFace.vertexIndices.begin(), backFace.vertexIndices.end());
+        }
         backFace.selected = false;
         newFaces.push_back(backFace);
 
-        // 3. Новая (передняя) грань из смещённых вершин
+        // 3. Новая (передняя) грань из смещённых вершин.
+        //    При outward она смотрит наружу (порядок как у newVertices).
+        //    При inward она должна смотреть внутрь (обратный порядок).
         Face frontFace;
         frontFace.vertexIndices = newVertices;
+        if (!outward) {
+            std::reverse(frontFace.vertexIndices.begin(), frontFace.vertexIndices.end());
+        }
         frontFace.normal = normal;
         frontFace.selected = false;
         newFaces.push_back(frontFace);
 
-        // 4. Боковые грани (четырёхугольники)
+        // 4. Боковые грани
         for (int i = 0; i < n; ++i) {
             int old0 = face.vertexIndices[i];
             int old1 = face.vertexIndices[(i+1)%n];
@@ -389,7 +401,13 @@ void HalfEdgeMesh::extrudeSelected(float distance) {
             int new1 = newVertices[(i+1)%n];
 
             Face side;
-            side.vertexIndices = {old0, old1, new1, new0};
+            if (outward) {
+                // Вытягивание наружу: old0 -> old1 -> new1 -> new0
+                side.vertexIndices = {old0, old1, new1, new0};
+            } else {
+                // Вдавливание: old0 -> new0 -> new1 -> old1
+                side.vertexIndices = {old0, new0, new1, old1};
+            }
             Vec3 e1 = vertices[old1].position - vertices[old0].position;
             Vec3 e2 = vertices[new0].position - vertices[old0].position;
             side.normal = e1.cross(e2).normalized();
@@ -417,5 +435,5 @@ void HalfEdgeMesh::extrudeSelected(float distance) {
     dirty = true;
     edgesDirty = true;
     updateSelectedBuffers();
-    LOGI("Extrude complete. Total faces: %zu", faces.size());
+    LOGI("Extrude (distance=%.2f) complete. Total faces: %zu", distance, faces.size());
 }
