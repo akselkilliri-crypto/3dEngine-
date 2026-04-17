@@ -167,11 +167,9 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
                 if (fabs(dx) > 10 || fabs(dy) > 10) tapHandled = true;
 
                 if (gManipulatorMode) {
-                    // Режим перемещения: сдвигаем цель
                     panTarget(dx, dy);
                     updateViewMatrix();
                 } else {
-                    // Режим вращения
                     gYaw -= dx * 0.5f;
                     gPitch += dy * 0.5f;
                     if (gPitch > 89.0f) gPitch = 89.0f;
@@ -220,6 +218,42 @@ JNIEXPORT void JNICALL
 Java_com_example_modelinengine_MyGLRenderer_nativeSetManipulatorMode(JNIEnv*, jobject, jboolean enabled) {
     gManipulatorMode = enabled;
     LOGI("Manipulator mode: %s", enabled ? "ON" : "OFF");
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativeDeleteSelected(JNIEnv*, jobject) {
+    if (gMesh) gMesh->deleteSelected();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativeSmooth(JNIEnv*, jobject) {
+    if (gMesh) gMesh->smoothMesh();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativeReset(JNIEnv*, jobject) {
+    if (gMesh) gMesh->resetToCube();
+}
+
+JNIEXPORT jint JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativeGetSelectedVertex(JNIEnv*, jobject) {
+    return gMesh ? gMesh->getSelectedVertex() : -1;
+}
+
+JNIEXPORT jfloatArray JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativeGetVertexPosition(JNIEnv* env, jobject, jint idx) {
+    if (!gMesh) return nullptr;
+    Vec3 pos;
+    if (!gMesh->getVertexPosition(idx, pos)) return nullptr;
+    jfloatArray result = env->NewFloatArray(3);
+    jfloat arr[3] = {pos.x, pos.y, pos.z};
+    env->SetFloatArrayRegion(result, 0, 3, arr);
+    return result;
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativeMoveVertex(JNIEnv*, jobject, jint idx, jfloat x, jfloat y, jfloat z) {
+    if (gMesh) gMesh->moveVertex(idx, Vec3(x, y, z));
 }
 
 } // extern "C"
