@@ -22,6 +22,12 @@ class MyGLRenderer(private val context: Context) : GLSurfaceView.Renderer {
     external fun nativeSubdivide()
     external fun nativeExtrude(distance: Float)
     external fun nativeSetManipulatorMode(enabled: Boolean)
+    external fun nativeDeleteSelected()
+    external fun nativeSmooth()
+    external fun nativeReset()
+    external fun nativeGetSelectedVertex(): Int
+    external fun nativeGetVertexPosition(vertexIdx: Int): FloatArray?
+    external fun nativeMoveVertex(vertexIdx: Int, x: Float, y: Float, z: Float)
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         nativeInit()
