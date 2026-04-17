@@ -3,14 +3,14 @@ package com.example.modelinengine
 import android.graphics.Color
 import android.opengl.GLSurfaceView
 import android.os.Bundle
+import android.text.InputType
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import android.text.InputType
-import android.widget.EditText
 
 class MainActivity : AppCompatActivity() {
 
@@ -64,12 +64,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun showExtrudeDialog() {
         val input = EditText(this)
-        input.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-        input.hint = "Расстояние (мм)"
+        input.inputType = InputType.TYPE_CLASS_NUMBER or
+                          InputType.TYPE_NUMBER_FLAG_SIGNED or
+                          InputType.TYPE_NUMBER_FLAG_DECIMAL
+        input.hint = "Расстояние (мм, можно отрицательное)"
 
         AlertDialog.Builder(this)
-            .setTitle("Вытянуть полигон")
-            .setMessage("Введите длину вытягивания в миллиметрах:")
+            .setTitle("Вытянуть/вдавить полигон")
+            .setMessage("Введите длину вытягивания (отрицательное — вдавить):")
             .setView(input)
             .setPositiveButton("Применить") { _, _ ->
                 val text = input.text.toString()
