@@ -15,9 +15,9 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-static GLuint gProgram = 0;          // Шейдер для граней (MatCap)
-static GLuint gEdgeProgram = 0;      // Шейдер для рёбер
-static GLuint gHighlightProgram = 0; // Шейдер для подсветки выделенных граней
+static GLuint gProgram = 0;
+static GLuint gEdgeProgram = 0;
+static GLuint gHighlightProgram = 0;
 static GLuint gMatCapTexture = 0;
 
 static HalfEdgeMesh* gMesh = nullptr;
@@ -92,7 +92,7 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     Mat4 mvp = gProjectionMatrix * gViewMatrix * gModelMatrix;
     Mat4 mv = gViewMatrix * gModelMatrix;
 
-    // === Рисуем грани (серые с MatCap) ===
+    // === Грани ===
     glUseProgram(gProgram);
     GLint mvpLoc = glGetUniformLocation(gProgram, "u_MVPMatrix");
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
@@ -104,18 +104,18 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     glUniform1i(texLoc, 0);
     gMesh->drawFaces(gProgram, GL_TRIANGLES);
 
-    // === Рисуем выделенные грани (жёлтые) ===
+    // === Выделенные грани ===
     glUseProgram(gHighlightProgram);
     mvpLoc = glGetUniformLocation(gHighlightProgram, "u_MVPMatrix");
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
     GLint colorLoc = glGetUniformLocation(gHighlightProgram, "u_Color");
-    glUniform4f(colorLoc, 1.0f, 1.0f, 0.0f, 1.0f); // Жёлтый
+    glUniform4f(colorLoc, 1.0f, 1.0f, 0.0f, 1.0f);
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(-1.0f, -1.0f);
     gMesh->drawSelectedFaces(gHighlightProgram, GL_TRIANGLES);
     glDisable(GL_POLYGON_OFFSET_FILL);
 
-    // === Рисуем рёбра ===
+    // === Рёбра ===
     glUseProgram(gEdgeProgram);
     mvpLoc = glGetUniformLocation(gEdgeProgram, "u_MVPMatrix");
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
@@ -174,7 +174,7 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnScale(
         JNIEnv*, jobject, jfloat scaleFactor) {
     gDistance /= scaleFactor;
     if (gDistance < 2.0f) gDistance = 2.0f;
-    if (gDistance > 20.0f) gDistance = 20.0f;
+    if (gDistance > 100.0f) gDistance = 100.0f; // было 20
     updateViewMatrix();
 }
 
@@ -190,6 +190,28 @@ Java_com_example_modelinengine_MyGLRenderer_nativeExtrude(JNIEnv*, jobject, jflo
     if (gMesh) {
         gMesh->extrudeSelected(distance);
     }
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_modelinengine_MyGLRenderer_nativePan(
+        JNIEnv*, jobject, jfloat dx, jfloat dy, jint screenWidth, jint screenHeight) {
+    // Перемещаем gTarget в плоскости, перпендикулярной направлению взгляда
+    // Определяем векторы "вправо" и "вверх" в мировых координатах
+    float radYaw = gYaw * M_PI / 180.0f;
+    float radPitch = gPitch * M_PI / 180.0f;
+    Vec3 forward(
+        cosf(radPitch) * sinf(radYaw),
+        sinf(radPitch),
+        cosf(radPitch) * cosf(radYaw)
+    );
+    Vec3 up(0,1,0);
+    Vec3 right = forward.cross(up).normalized();
+    Vec3 camUp = right.cross(forward).normalized();
+
+    // Масштабируем смещение в зависимости от расстояния
+    float scale = gDistance * 0.005f; // эмпирический коэффициент
+    gTarget = gTarget + right * (dx * scale) + camUp * (-dy * scale);
+    updateViewMatrix();
 }
 
 } // extern "C"
