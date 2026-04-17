@@ -1,21 +1,26 @@
 package com.example.modelinengine
 
-import android.app.AlertDialog
 import android.opengl.GLSurfaceView
 import android.os.Bundle
-import android.text.InputType
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
-import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import android.text.InputType
+import android.widget.EditText
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var glSurfaceView: GLSurfaceView
     private lateinit var renderer: MyGLRenderer
     private lateinit var scaleGestureDetector: ScaleGestureDetector
+
+    // Для панорамирования
+    private var isPanning = false
+    private var lastPanX = 0f
+    private var lastPanY = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,14 +74,49 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Сначала передаём в ScaleGestureDetector (щипок)
         scaleGestureDetector.onTouchEvent(event)
 
-        if (!scaleGestureDetector.isInProgress) {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN,
-                MotionEvent.ACTION_MOVE,
-                MotionEvent.ACTION_UP,
-                MotionEvent.ACTION_CANCEL -> {
+        val pointerCount = event.pointerCount
+
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                // Один палец — начинаем вращение (обрабатывается в renderer.handleTouchEvent)
+                renderer.handleTouchEvent(event)
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                // Появился второй палец — начинаем панорамирование
+                if (pointerCount == 2) {
+                    isPanning = true
+                    lastPanX = (event.getX(0) + event.getX(1)) / 2f
+                    lastPanY = (event.getY(0) + event.getY(1)) / 2f
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (isPanning && pointerCount == 2) {
+                    // Панорамирование двумя пальцами
+                    val currentX = (event.getX(0) + event.getX(1)) / 2f
+                    val currentY = (event.getY(0) + event.getY(1)) / 2f
+                    val dx = currentX - lastPanX
+                    val dy = currentY - lastPanY
+                    renderer.nativePan(dx, dy, glSurfaceView.width, glSurfaceView.height)
+                    lastPanX = currentX
+                    lastPanY = currentY
+                    glSurfaceView.requestRender()
+                } else if (!scaleGestureDetector.isInProgress) {
+                    // Один палец — вращение
+                    renderer.handleTouchEvent(event)
+                }
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (pointerCount == 2) {
+                    // Один из пальцев поднят, выключаем панорамирование
+                    isPanning = false
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                isPanning = false
+                if (!scaleGestureDetector.isInProgress) {
                     renderer.handleTouchEvent(event)
                 }
             }
