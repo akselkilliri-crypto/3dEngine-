@@ -37,6 +37,9 @@ static Vec3 gTarget(0,0,0);
 static float gLastX = 0, gLastY = 0;
 static bool gDragging = false;
 
+// Режим манипулятора (перемещение вместо вращения)
+static bool gManipulatorMode = false;
+
 void updateViewMatrix() {
     float radYaw = gYaw * M_PI / 180.0f;
     float radPitch = gPitch * M_PI / 180.0f;
@@ -46,6 +49,23 @@ void updateViewMatrix() {
         gDistance * cosf(radPitch) * cosf(radYaw)
     );
     gViewMatrix = Mat4::lookAt(eye, gTarget, Vec3(0,1,0));
+}
+
+// Перемещение цели камеры в плоскости экрана
+void panTarget(float dx, float dy) {
+    float radYaw = gYaw * M_PI / 180.0f;
+    float radPitch = gPitch * M_PI / 180.0f;
+    Vec3 forward(
+        cosf(radPitch) * sinf(radYaw),
+        sinf(radPitch),
+        cosf(radPitch) * cosf(radYaw)
+    );
+    Vec3 up(0,1,0);
+    Vec3 right = forward.cross(up).normalized();
+    Vec3 camUp = right.cross(forward).normalized();
+
+    float scale = gDistance * 0.005f;
+    gTarget = gTarget + right * (dx * scale) + camUp * (-dy * scale);
 }
 
 extern "C" {
@@ -92,7 +112,7 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     Mat4 mvp = gProjectionMatrix * gViewMatrix * gModelMatrix;
     Mat4 mv = gViewMatrix * gModelMatrix;
 
-    // === Грани ===
+    // Грани
     glUseProgram(gProgram);
     GLint mvpLoc = glGetUniformLocation(gProgram, "u_MVPMatrix");
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
@@ -104,7 +124,7 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     glUniform1i(texLoc, 0);
     gMesh->drawFaces(gProgram, GL_TRIANGLES);
 
-    // === Выделенные грани ===
+    // Выделенные грани
     glUseProgram(gHighlightProgram);
     mvpLoc = glGetUniformLocation(gHighlightProgram, "u_MVPMatrix");
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
@@ -115,7 +135,7 @@ Java_com_example_modelinengine_MyGLRenderer_nativeRender(JNIEnv*, jobject) {
     gMesh->drawSelectedFaces(gHighlightProgram, GL_TRIANGLES);
     glDisable(GL_POLYGON_OFFSET_FILL);
 
-    // === Рёбра ===
+    // Рёбра
     glUseProgram(gEdgeProgram);
     mvpLoc = glGetUniformLocation(gEdgeProgram, "u_MVPMatrix");
     glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp.data);
@@ -145,17 +165,25 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnTouchEvent(
                 float dx = x - gLastX;
                 float dy = y - gLastY;
                 if (fabs(dx) > 10 || fabs(dy) > 10) tapHandled = true;
-                gYaw -= dx * 0.5f;
-                gPitch += dy * 0.5f;
-                if (gPitch > 89.0f) gPitch = 89.0f;
-                if (gPitch < -89.0f) gPitch = -89.0f;
-                updateViewMatrix();
+
+                if (gManipulatorMode) {
+                    // Режим перемещения: сдвигаем цель
+                    panTarget(dx, dy);
+                    updateViewMatrix();
+                } else {
+                    // Режим вращения
+                    gYaw -= dx * 0.5f;
+                    gPitch += dy * 0.5f;
+                    if (gPitch > 89.0f) gPitch = 89.0f;
+                    if (gPitch < -89.0f) gPitch = -89.0f;
+                    updateViewMatrix();
+                }
                 gLastX = x;
                 gLastY = y;
             }
             break;
         case 1: // ACTION_UP
-            if (!tapHandled) {
+            if (!tapHandled && !gManipulatorMode) {
                 int faceIdx = gMesh->pickFace(gProjectionMatrix, gViewMatrix, gWidth, gHeight, x, y);
                 if (faceIdx >= 0) {
                     gMesh->toggleFaceSelection(faceIdx);
@@ -174,44 +202,24 @@ Java_com_example_modelinengine_MyGLRenderer_nativeOnScale(
         JNIEnv*, jobject, jfloat scaleFactor) {
     gDistance /= scaleFactor;
     if (gDistance < 2.0f) gDistance = 2.0f;
-    if (gDistance > 100.0f) gDistance = 100.0f; // было 20
+    if (gDistance > 100.0f) gDistance = 100.0f;
     updateViewMatrix();
 }
 
 JNIEXPORT void JNICALL
 Java_com_example_modelinengine_MyGLRenderer_nativeSubdivide(JNIEnv*, jobject) {
-    if (gMesh) {
-        gMesh->subdivideSelected();
-    }
+    if (gMesh) gMesh->subdivideSelected();
 }
 
 JNIEXPORT void JNICALL
 Java_com_example_modelinengine_MyGLRenderer_nativeExtrude(JNIEnv*, jobject, jfloat distance) {
-    if (gMesh) {
-        gMesh->extrudeSelected(distance);
-    }
+    if (gMesh) gMesh->extrudeSelected(distance);
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_modelinengine_MyGLRenderer_nativePan(
-        JNIEnv*, jobject, jfloat dx, jfloat dy, jint screenWidth, jint screenHeight) {
-    // Перемещаем gTarget в плоскости, перпендикулярной направлению взгляда
-    // Определяем векторы "вправо" и "вверх" в мировых координатах
-    float radYaw = gYaw * M_PI / 180.0f;
-    float radPitch = gPitch * M_PI / 180.0f;
-    Vec3 forward(
-        cosf(radPitch) * sinf(radYaw),
-        sinf(radPitch),
-        cosf(radPitch) * cosf(radYaw)
-    );
-    Vec3 up(0,1,0);
-    Vec3 right = forward.cross(up).normalized();
-    Vec3 camUp = right.cross(forward).normalized();
-
-    // Масштабируем смещение в зависимости от расстояния
-    float scale = gDistance * 0.005f; // эмпирический коэффициент
-    gTarget = gTarget + right * (dx * scale) + camUp * (-dy * scale);
-    updateViewMatrix();
+Java_com_example_modelinengine_MyGLRenderer_nativeSetManipulatorMode(JNIEnv*, jobject, jboolean enabled) {
+    gManipulatorMode = enabled;
+    LOGI("Manipulator mode: %s", enabled ? "ON" : "OFF");
 }
 
 } // extern "C"
