@@ -9,6 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Кнопка Детализация (+) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabSubdivide"
         android:layout_width="wrap_content"
@@ -20,6 +21,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- Кнопка Вытянуть (↑) -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabExtrude"
         android:layout_width="wrap_content"
@@ -30,5 +32,18 @@
         app:srcCompat="@android:drawable/arrow_up_float"
         app:layout_constraintBottom_toTopOf="@id/fabSubdivide"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Кнопка Манипулятор (↔) - переключение режима перемещения -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabManipulator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:contentDescription="Manipulator"
+        app:fabSize="normal"
+        app:srcCompat="@android:drawable/ic_menu_rotate"
+        app:layout_constraintBottom_toTopOf="@id/fabExtrude"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:backgroundTint="@color/design_default_color_primary" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
