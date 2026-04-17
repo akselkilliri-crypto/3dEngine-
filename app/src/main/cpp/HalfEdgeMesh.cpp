@@ -328,7 +328,7 @@ void HalfEdgeMesh::subdivideSelected() {
     LOGI("Subdivision complete. Total faces: %zu, vertices: %zu", faces.size(), vertices.size());
 }
 
-// ========== ИСПРАВЛЕННЫЙ extrudeSelected (полная генерация боковых граней при любом знаке) ==========
+// ========== ИСПРАВЛЕННЫЙ extrudeSelected (устранение дублирования геометрии при вдавливании) ==========
 void HalfEdgeMesh::extrudeSelected(float distance) {
     if (fabs(distance) < 1e-5f) return;
 
@@ -397,13 +397,11 @@ void HalfEdgeMesh::extrudeSelected(float distance) {
                 newFaces.push_back(side);
             }
         } else {
-            // Вдавливание: исходная грань остаётся на месте (внешняя поверхность),
-            // внутренняя грань (смещённая) с развёрнутым порядком вершин,
-            // боковые грани соединяют исходный контур со смещённым.
-            Face originalFace = face; // остаётся без изменений
-            originalFace.selected = false;
-            newFaces.push_back(originalFace);
+            // Вдавливание: исходная грань удаляется, создаётся внутренняя грань и боковые грани,
+            // соединяющие старый контур (который теперь часть соседних граней) с новым.
+            // Исходная грань НЕ добавляется в newFaces.
 
+            // Внутренняя грань (смещённая, с развёрнутым порядком для правильной ориентации)
             Face innerFace;
             innerFace.vertexIndices = newVertices;
             std::reverse(innerFace.vertexIndices.begin(), innerFace.vertexIndices.end());
@@ -411,6 +409,7 @@ void HalfEdgeMesh::extrudeSelected(float distance) {
             innerFace.selected = false;
             newFaces.push_back(innerFace);
 
+            // Боковые грани
             for (int i = 0; i < n; ++i) {
                 int old0 = face.vertexIndices[i];
                 int old1 = face.vertexIndices[(i+1)%n];
