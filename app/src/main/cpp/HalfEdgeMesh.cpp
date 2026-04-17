@@ -328,14 +328,13 @@ void HalfEdgeMesh::subdivideSelected() {
     LOGI("Subdivision complete. Total faces: %zu, vertices: %zu", faces.size(), vertices.size());
 }
 
-// ========== ИСПРАВЛЕННЫЙ extrudeSelected (вдавливание изменяет существующую геометрию) ==========
+// ========== ИСПРАВЛЕННЫЙ extrudeSelected (полная генерация боковых граней при любом знаке) ==========
 void HalfEdgeMesh::extrudeSelected(float distance) {
     if (fabs(distance) < 1e-5f) return;
 
     std::vector<Face> newFaces;
     std::vector<int> selectedFaceIndices;
 
-    // Сохраняем невыделенные грани
     for (size_t i = 0; i < faces.size(); ++i) {
         if (faces[i].selected) {
             selectedFaceIndices.push_back(i);
@@ -348,29 +347,30 @@ void HalfEdgeMesh::extrudeSelected(float distance) {
 
     bool outward = (distance > 0.0f);
 
-    if (outward) {
-        // Вытягивание наружу — исходное поведение
-        for (int faceIdx : selectedFaceIndices) {
-            const Face& face = faces[faceIdx];
-            int n = face.vertexIndices.size();
-            if (n < 3) continue;
+    for (int faceIdx : selectedFaceIndices) {
+        const Face& face = faces[faceIdx];
+        int n = face.vertexIndices.size();
+        if (n < 3) continue;
 
-            Vec3 normal = face.normal;
-            float gray[4] = {0.7f, 0.7f, 0.7f, 1.0f};
+        Vec3 normal = face.normal;
+        float gray[4] = {0.7f, 0.7f, 0.7f, 1.0f};
 
-            std::vector<int> newVertices;
-            for (int i = 0; i < n; ++i) {
-                int oldIdx = face.vertexIndices[i];
-                Vec3 oldPos = vertices[oldIdx].position;
-                Vec3 newPos = oldPos + normal * distance;
-                VertexHE newVert;
-                newVert.position = newPos;
-                newVert.normal = normal;
-                for (int c = 0; c < 4; ++c) newVert.color[c] = gray[c];
-                int newIdx = addVertex(newVert);
-                newVertices.push_back(newIdx);
-            }
+        // Новые вершины (смещённые на distance вдоль нормали)
+        std::vector<int> newVertices;
+        for (int i = 0; i < n; ++i) {
+            int oldIdx = face.vertexIndices[i];
+            Vec3 oldPos = vertices[oldIdx].position;
+            Vec3 newPos = oldPos + normal * distance;
+            VertexHE newVert;
+            newVert.position = newPos;
+            newVert.normal = normal;
+            for (int c = 0; c < 4; ++c) newVert.color[c] = gray[c];
+            int newIdx = addVertex(newVert);
+            newVertices.push_back(newIdx);
+        }
 
+        if (outward) {
+            // Вытягивание наружу: исходная грань остаётся (развёрнутая), передняя грань из новых вершин, боковые грани
             Face backFace = face;
             std::reverse(backFace.vertexIndices.begin(), backFace.vertexIndices.end());
             backFace.selected = false;
@@ -396,69 +396,34 @@ void HalfEdgeMesh::extrudeSelected(float distance) {
                 side.selected = false;
                 newFaces.push_back(side);
             }
-        }
-    } else {
-        // Вдавливание: заменяем исходную грань на смещённую, а примыкающие грани обновляем
-        for (int faceIdx : selectedFaceIndices) {
-            const Face& face = faces[faceIdx];
-            int n = face.vertexIndices.size();
-            if (n < 3) continue;
+        } else {
+            // Вдавливание: исходная грань остаётся на месте (внешняя поверхность),
+            // внутренняя грань (смещённая) с развёрнутым порядком вершин,
+            // боковые грани соединяют исходный контур со смещённым.
+            Face originalFace = face; // остаётся без изменений
+            originalFace.selected = false;
+            newFaces.push_back(originalFace);
 
-            Vec3 normal = face.normal;
-            float gray[4] = {0.7f, 0.7f, 0.7f, 1.0f};
+            Face innerFace;
+            innerFace.vertexIndices = newVertices;
+            std::reverse(innerFace.vertexIndices.begin(), innerFace.vertexIndices.end());
+            innerFace.normal = normal;
+            innerFace.selected = false;
+            newFaces.push_back(innerFace);
 
-            // Новые вершины (смещённые внутрь)
-            std::vector<int> newVertices;
             for (int i = 0; i < n; ++i) {
-                int oldIdx = face.vertexIndices[i];
-                Vec3 oldPos = vertices[oldIdx].position;
-                Vec3 newPos = oldPos + normal * distance; // distance отрицательный
-                VertexHE newVert;
-                newVert.position = newPos;
-                newVert.normal = normal;
-                for (int c = 0; c < 4; ++c) newVert.color[c] = gray[c];
-                int newIdx = addVertex(newVert);
-                newVertices.push_back(newIdx);
-            }
+                int old0 = face.vertexIndices[i];
+                int old1 = face.vertexIndices[(i+1)%n];
+                int new0 = newVertices[i];
+                int new1 = newVertices[(i+1)%n];
 
-            // Заменяем исходную грань на грань со смещёнными вершинами (без изменения порядка)
-            Face movedFace;
-            movedFace.vertexIndices = newVertices;
-            movedFace.normal = normal;
-            movedFace.selected = false;
-            newFaces.push_back(movedFace);
-
-            // Обновляем примыкающие грани, заменяя старые вершины на новые
-            for (int i = 0; i < n; ++i) {
-                int oldIdx = face.vertexIndices[i];
-                int newIdx = newVertices[i];
-                int nextOldIdx = face.vertexIndices[(i+1)%n];
-                int nextNewIdx = newVertices[(i+1)%n];
-
-                for (auto& f : newFaces) {
-                    // Проверяем, является ли грань боковой (содержит оба старых индекса, но не является исходной)
-                    bool hasBoth = false;
-                    bool hasNext = false;
-                    for (int idx : f.vertexIndices) {
-                        if (idx == oldIdx) hasBoth = true;
-                        if (idx == nextOldIdx) hasNext = true;
-                    }
-                    if (hasBoth && hasNext) {
-                        // Это боковая грань, заменяем в ней старые индексы на новые
-                        for (int& idx : f.vertexIndices) {
-                            if (idx == oldIdx) idx = newIdx;
-                            else if (idx == nextOldIdx) idx = nextNewIdx;
-                        }
-                        // Пересчитываем нормаль
-                        if (f.vertexIndices.size() >= 3) {
-                            Vec3 v0 = vertices[f.vertexIndices[0]].position;
-                            Vec3 v1 = vertices[f.vertexIndices[1]].position;
-                            Vec3 v2 = vertices[f.vertexIndices[2]].position;
-                            f.normal = (v1 - v0).cross(v2 - v0).normalized();
-                        }
-                        break;
-                    }
-                }
+                Face side;
+                side.vertexIndices = {old0, old1, new1, new0};
+                Vec3 e1 = vertices[old1].position - vertices[old0].position;
+                Vec3 e2 = vertices[new0].position - vertices[old0].position;
+                side.normal = e1.cross(e2).normalized();
+                side.selected = false;
+                newFaces.push_back(side);
             }
         }
     }
